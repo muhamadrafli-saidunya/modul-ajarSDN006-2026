@@ -22,7 +22,9 @@ import {
   ArrowRight,
   School,
   FileText,
-  Sliders
+  Sliders,
+  ExternalLink,
+  ChevronRight
 } from 'lucide-react';
 import { GeneratedExam, QuestionItem, QuestionType, KopConfig, TeachingModule } from '../../types';
 import {
@@ -98,7 +100,17 @@ const QUESTION_TYPES: { type: QuestionType; label: string; desc: string; icon: s
 ];
 
 export const QuestionGeneratorView: React.FC = () => {
-  const { userProfile, setModules, showToast, setCurrentView } = useApp();
+  const {
+    userProfile,
+    setModules,
+    showToast,
+    setCurrentView,
+    setCurriculumInitialTab,
+    setCurriculumTargetSubject,
+    setCurriculumTargetFase,
+    selectedTpPayload,
+    setSelectedTpPayload,
+  } = useApp();
 
   // Form Configuration State
   const [subject, setSubject] = useState<string>('IPAS');
@@ -122,6 +134,27 @@ export const QuestionGeneratorView: React.FC = () => {
   const [questionStyle, setQuestionStyle] = useState<string>(
     'Bervariasi Penuh (Kasus, Tabel Data, Sebab-Akibat, Solusi & Komparasi)'
   );
+
+  // Synchronize when TP is selected from Curriculum Guide
+  useEffect(() => {
+    if (selectedTpPayload) {
+      if (selectedTpPayload.tp) setTp(selectedTpPayload.tp);
+      if (selectedTpPayload.topic) setTopic(selectedTpPayload.topic);
+      if (selectedTpPayload.subject) setSubject(selectedTpPayload.subject);
+      if (selectedTpPayload.grade) setGrade(selectedTpPayload.grade);
+      setSelectedTpPayload(null);
+    }
+  }, [selectedTpPayload, setSelectedTpPayload]);
+
+  // Navigate to Curriculum & TP Settings
+  const handleNavigateToTpSettings = () => {
+    if (setCurriculumInitialTab) setCurriculumInitialTab('cp');
+    if (setCurriculumTargetSubject) setCurriculumTargetSubject(subject);
+    const faseLetter = (fase.replace('Fase ', '').trim() || 'B') as 'A' | 'B' | 'C';
+    if (setCurriculumTargetFase) setCurriculumTargetFase(faseLetter);
+    setCurrentView('curriculum');
+    showToast('Membuka Panduan & Pengaturan Capaian Pembelajaran (CP) dan Alur Tujuan Pembelajaran (ATP/TP)...', 'info');
+  };
 
   // Generation & Results State
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
@@ -642,12 +675,33 @@ export const QuestionGeneratorView: React.FC = () => {
                 </div>
 
                 {/* Rekomendasi TP Cepat */}
-                {activeTpPresets.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-                    <span className="text-[11px] font-bold text-[#00529C] dark:text-blue-400 flex items-center gap-1 mb-2">
-                      <BookOpen className="w-3.5 h-3.5" />
-                      Pilihan TP Standar Kurikulum ({subject}):
-                    </span>
+                <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <button
+                      type="button"
+                      id="btn-nav-tp-settings"
+                      onClick={handleNavigateToTpSettings}
+                      title="Klik untuk membuka Pengaturan & Panduan Tujuan Pembelajaran (TP) resmi Kurikulum Merdeka"
+                      className="group text-[11px] font-bold text-[#00529C] dark:text-blue-400 hover:text-[#FF7300] dark:hover:text-amber-400 flex items-center gap-1.5 transition text-left cursor-pointer p-0.5 -ml-0.5 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-[#00529C]/30"
+                    >
+                      <BookOpen className="w-3.5 h-3.5 group-hover:scale-110 transition-transform text-[#00529C] dark:text-blue-400 group-hover:text-[#FF7300]" />
+                      <span className="group-hover:underline underline-offset-2">
+                        Pilihan TP Standar Kurikulum ({subject}):
+                      </span>
+                      <ExternalLink className="w-3 h-3 opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleNavigateToTpSettings}
+                      className="text-[10px] font-bold text-slate-500 hover:text-[#00529C] dark:text-slate-400 dark:hover:text-blue-300 flex items-center gap-0.5 px-2 py-0.5 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/40 transition shrink-0 cursor-pointer"
+                    >
+                      <span>Pengaturan TP</span>
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  {activeTpPresets.length > 0 ? (
                     <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
                       {activeTpPresets.map((preset, idx) => (
                         <div key={idx} className="bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl text-xs space-y-1">
@@ -668,8 +722,22 @@ export const QuestionGeneratorView: React.FC = () => {
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-dashed border-slate-200 dark:border-slate-700 text-center">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Belum ada preset lokal untuk mata pelajaran {subject}.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleNavigateToTpSettings}
+                        className="mt-1.5 inline-flex items-center gap-1 text-xs font-bold text-[#00529C] dark:text-blue-400 hover:underline cursor-pointer"
+                      >
+                        <BookOpen className="w-3 h-3" />
+                        <span>Buka Panduan & Pengaturan TP Lengkap ↗</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* 3. Jumlah Soal */}

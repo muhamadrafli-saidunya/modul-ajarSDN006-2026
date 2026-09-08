@@ -58,6 +58,15 @@ interface AppContextType {
   resetToDefaultData: () => void;
   toast: ToastInfo | null;
   showToast: (text: string, type?: 'success' | 'info' | 'error' | 'warning') => void;
+  // Curriculum & TP Navigation
+  curriculumInitialTab: 'cp' | 'deep_learning' | 'kbc';
+  setCurriculumInitialTab: (tab: 'cp' | 'deep_learning' | 'kbc') => void;
+  curriculumTargetSubject: string;
+  setCurriculumTargetSubject: (subject: string) => void;
+  curriculumTargetFase: 'A' | 'B' | 'C';
+  setCurriculumTargetFase: (fase: 'A' | 'B' | 'C') => void;
+  selectedTpPayload: { tp: string; topic?: string; subject?: string; grade?: string } | null;
+  setSelectedTpPayload: (payload: { tp: string; topic?: string; subject?: string; grade?: string } | null) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -160,6 +169,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [snapshots]);
 
   const [toast, setToast] = useState<ToastInfo | null>(null);
+
+  // Curriculum & TP Navigation State
+  const [curriculumInitialTab, setCurriculumInitialTab] = useState<'cp' | 'deep_learning' | 'kbc'>('deep_learning');
+  const [curriculumTargetSubject, setCurriculumTargetSubject] = useState<string>('IPAS');
+  const [curriculumTargetFase, setCurriculumTargetFase] = useState<'A' | 'B' | 'C'>('B');
+  const [selectedTpPayload, setSelectedTpPayload] = useState<{ tp: string; topic?: string; subject?: string; grade?: string } | null>(null);
 
   // Sync dark mode with document
   useEffect(() => {
@@ -515,6 +530,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resetToDefaultData,
         toast,
         showToast,
+        curriculumInitialTab,
+        setCurriculumInitialTab,
+        curriculumTargetSubject,
+        setCurriculumTargetSubject,
+        curriculumTargetFase,
+        setCurriculumTargetFase,
+        selectedTpPayload,
+        setSelectedTpPayload,
       }}
     >
       {children}
