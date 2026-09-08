@@ -1458,45 +1458,92 @@ export function generateExamPaperHtml(
     <div class="questions-list space-y-5" style="margin-top: 10px;">
       ${exam.questions
         .map((q, idx) => {
+          // Check if all options are short for 2-column rendering
+          const isShortOptions = q.options && q.options.length > 0 && q.options.every(opt => (opt || '').length <= 32);
+          const isCheckboxes = q.type === 'Pilihan Ganda Kompleks';
+
           return `
-          <div class="question-block" style="margin-bottom: 18px; page-break-inside: avoid;">
+          <div class="question-block" style="margin-bottom: 20px; page-break-inside: avoid;">
             <table style="width: 100%; border-collapse: collapse; border: none;">
               <tbody>
                 <tr>
-                  <td style="width: 28px; vertical-align: top; font-weight: bold; border: none; padding: 0;">
+                  <td style="width: 28px; vertical-align: top; font-weight: bold; border: none; padding: 0; font-size: 10.5pt;">
                     ${idx + 1}.
                   </td>
                   <td style="vertical-align: top; border: none; padding: 0;">
                     ${
                       q.stimulus
-                        ? `<div style="font-style: italic; background-color: #f1f5f9; padding: 6px 10px; border-left: 3px solid #00529C; margin-bottom: 6px; font-size: 10pt; line-height: 1.45;">
+                        ? `<div style="font-style: normal; background-color: #f8fafc; padding: 8px 12px; border: 1px solid #e2e8f0; border-left: 3.5px solid #00529C; border-radius: 4px; margin-bottom: 8px; font-size: 10pt; line-height: 1.55; white-space: pre-line; color: #1e293b;">
                             ${q.stimulus}
                           </div>`
                         : ''
                     }
-                    <div style="font-size: 10.5pt; font-weight: 500; line-height: 1.5; color: #111;">
+                    <div style="font-size: 10.5pt; font-weight: 600; line-height: 1.55; color: #0f172a; white-space: pre-line;">
                       ${q.question}
                     </div>
 
                     ${
-                      q.options && q.options.length > 0
+                      isCheckboxes
+                        ? `<div style="font-size: 8.5pt; color: #64748b; font-style: italic; margin-top: 3px; margin-bottom: 4px;">*(Pilihlah lebih dari satu jawaban yang benar dengan memberi tanda centang [✓])*</div>`
+                        : ''
+                    }
+
+                    ${
+                      q.options && q.options.length > 0 && q.type !== 'Menjodohkan'
                         ? `
-                      <div class="options-grid" style="margin-top: 8px; margin-left: 4px;">
-                        <table style="width: 100%; border-collapse: collapse; border: none;">
-                          <tbody>
-                            ${q.options
-                              .map(
-                                opt => `
-                              <tr>
-                                <td style="padding: 2px 4px; border: none; font-size: 10pt;">
-                                  ${opt}
-                                </td>
-                              </tr>
-                            `
-                              )
-                              .join('')}
-                          </tbody>
-                        </table>
+                      <div class="options-grid" style="margin-top: 8px; margin-left: 2px; display: grid; grid-template-columns: ${isShortOptions ? 'repeat(2, 1fr)' : '1fr'}; gap: 4px 16px;">
+                        ${q.options
+                          .map((opt, oIdx) => {
+                            const defaultLetter = String.fromCharCode(65 + oIdx);
+                            let optLetter = `${defaultLetter}.`;
+                            let optText = opt;
+                            const match = opt.match(/^([A-Da-d][\.\)])\s*(.*)$/);
+                            if (match) {
+                              optLetter = match[1].toUpperCase();
+                              optText = match[2];
+                            }
+
+                            if (isCheckboxes) {
+                              return `
+                                <div style="display: flex; align-items: flex-start; gap: 6px; font-size: 10pt; line-height: 1.45; padding: 2px 0;">
+                                  <span style="display: inline-block; width: 14px; height: 14px; border: 1.5px solid #334155; border-radius: 2px; margin-top: 2px; flex-shrink: 0;"></span>
+                                  <span><strong style="color: #0f172a;">${optLetter}</strong> <span style="color: #1e293b;">${optText}</span></span>
+                                </div>
+                              `;
+                            }
+
+                            return `
+                              <div style="display: flex; align-items: flex-start; gap: 6px; font-size: 10pt; line-height: 1.45; padding: 2px 0;">
+                                <span style="font-weight: bold; min-width: 20px; color: #0f172a; flex-shrink: 0;">${optLetter}</span>
+                                <span style="color: #1e293b;">${optText}</span>
+                              </div>
+                            `;
+                          })
+                          .join('')}
+                      </div>
+                    `
+                        : ''
+                    }
+
+                    ${
+                      q.type === 'Menjodohkan' && q.options && q.options.length > 0
+                        ? `
+                      <div style="margin-top: 8px; background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px 12px;">
+                        <div style="font-size: 9pt; font-weight: bold; color: #00529C; margin-bottom: 6px;">Pasangkan Kolom A dan Kolom B berikut secara tepat:</div>
+                        ${q.options.map(opt => `<div style="padding: 3px 0; font-size: 9.5pt; border-bottom: 1px dashed #e2e8f0; font-family: monospace; white-space: pre-line;">${opt}</div>`).join('')}
+                      </div>
+                    `
+                        : ''
+                    }
+
+                    ${
+                      q.type === 'Benar/Salah'
+                        ? `
+                      <div style="margin-top: 8px; display: inline-flex; align-items: center; gap: 8px; font-size: 9.5pt; font-weight: bold; background-color: #f1f5f9; padding: 4px 10px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                        <span style="color: #334155;">Pilihan Jawaban:</span>
+                        <span style="padding: 1px 6px; border: 1.5px solid #00529C; border-radius: 4px; color: #00529C;">[  BENAR  ]</span>
+                        <span style="color: #94a3b8;">/</span>
+                        <span style="padding: 1px 6px; border: 1.5px solid #dc2626; border-radius: 4px; color: #dc2626;">[  SALAH  ]</span>
                       </div>
                     `
                         : ''
@@ -1505,7 +1552,7 @@ export function generateExamPaperHtml(
                     ${
                       q.type === 'Isian Singkat'
                         ? `
-                      <div style="margin-top: 12px; font-size: 10pt;">
+                      <div style="margin-top: 10px; font-size: 10pt;">
                         <strong>Jawaban:</strong> ........................................................................................................................................................
                       </div>
                     `
@@ -1515,9 +1562,9 @@ export function generateExamPaperHtml(
                     ${
                       q.type === 'Uraian'
                         ? `
-                      <div style="margin-top: 14px; font-size: 10pt;">
+                      <div style="margin-top: 12px; font-size: 10pt;">
                         <strong>Ruang Jawaban:</strong>
-                        <div style="border-bottom: 1px dotted #94a3b8; height: 26px;"></div>
+                        <div style="border-bottom: 1px dotted #94a3b8; height: 26px; margin-top: 2px;"></div>
                         <div style="border-bottom: 1px dotted #94a3b8; height: 26px;"></div>
                         <div style="border-bottom: 1px dotted #94a3b8; height: 26px;"></div>
                       </div>
@@ -1528,9 +1575,13 @@ export function generateExamPaperHtml(
                     ${
                       showAnswers
                         ? `
-                      <div style="margin-top: 10px; padding: 6px 10px; background-color: #ecfdf5; border: 1px solid #10b981; border-radius: 4px; font-size: 9.5pt;">
-                        <strong style="color: #065f46;">Kunci Jawaban:</strong> ${q.correctAnswer} <br/>
-                        <strong style="color: #065f46;">Pembahasan:</strong> ${q.discussion}
+                      <div style="margin-top: 10px; padding: 8px 12px; background-color: #ecfdf5; border: 1px solid #10b981; border-radius: 6px; font-size: 9.5pt; line-height: 1.5; white-space: pre-line;">
+                        <div style="font-weight: bold; color: #065f46; margin-bottom: 3px;">
+                          ✓ Kunci Jawaban: <span style="font-weight: 600; color: #047857;">${q.correctAnswer}</span>
+                        </div>
+                        <div style="color: #065f46;">
+                          <strong>Pembahasan:</strong> ${q.discussion}
+                        </div>
                       </div>
                     `
                         : ''
@@ -1602,10 +1653,10 @@ export function generateAnswerKeyHtml(exam: GeneratedExam): string {
               ${q.type}<br/>
               <span style="color: #64748b; font-size: 8.5pt;">(${q.cognitiveLevel})</span>
             </td>
-            <td style="border: 1px solid #333; padding: 6px 8px; font-weight: bold; color: #047857;">
+            <td style="border: 1px solid #333; padding: 6px 8px; font-weight: bold; color: #047857; white-space: pre-line;">
               ${q.correctAnswer}
             </td>
-            <td style="border: 1px solid #333; padding: 6px 8px; line-height: 1.4;">
+            <td style="border: 1px solid #333; padding: 6px 8px; line-height: 1.5; white-space: pre-line;">
               ${q.discussion}
             </td>
             <td style="border: 1px solid #333; padding: 6px 4px; text-align: center; font-weight: bold;">

@@ -271,16 +271,47 @@ Format setiap objek dalam JSON array:
             }
           });
           if (response?.text) {
-            const rawText = response.text
+            const rawText = response.text.trim();
+            // Robustly extract JSON array between [ and ]
+            let cleanJson = rawText
               .replace(/```json/gi, '')
               .replace(/```/g, '')
               .trim();
-            const parsed = JSON.parse(rawText);
+            const firstBracket = cleanJson.indexOf('[');
+            const lastBracket = cleanJson.lastIndexOf(']');
+            if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+              cleanJson = cleanJson.substring(firstBracket, lastBracket + 1);
+            }
+
+            const parsed = JSON.parse(cleanJson);
             if (Array.isArray(parsed) && parsed.length > 0) {
               const formattedQuestions = parsed.map((item: any, idx: number) => {
                 const itemType = item.type || (questionType === 'Campuran'
                   ? (idx < Math.ceil(count * 0.6) ? 'Pilihan Ganda' : idx < Math.ceil(count * 0.85) ? 'Isian Singkat' : 'Uraian')
                   : questionType);
+
+                // Normalize options with clean letters
+                let normalizedOptions: string[] = [];
+                if (Array.isArray(item.options) && item.options.length > 0) {
+                  normalizedOptions = item.options.map((opt: string, optIdx: number) => {
+                    const text = String(opt || '').trim();
+                    const defaultLetter = String.fromCharCode(65 + optIdx);
+                    if (/^[A-Da-d][\.\)]\s*/.test(text)) {
+                      return text;
+                    }
+                    return `${defaultLetter}. ${text}`;
+                  });
+                }
+
+                // Clean and normalize correct answer
+                let finalCorrect = String(item.correctAnswer || item.answer || '').trim();
+                if (/^[A-Da-d][\.]?$/.test(finalCorrect) && normalizedOptions.length > 0) {
+                  const targetLetter = finalCorrect[0].toUpperCase();
+                  const matched = normalizedOptions.find(o => o.startsWith(targetLetter + '.'));
+                  if (matched) {
+                    finalCorrect = matched;
+                  }
+                }
 
                 return {
                   id: `ai-q-${idx + 1}-${Date.now()}`,
@@ -289,12 +320,12 @@ Format setiap objek dalam JSON array:
                   pattern: item.pattern || inferQuestionPattern(item.question || '', item.stimulus || '', idx),
                   stimulus: item.stimulus || '',
                   question: item.question || `Pertanyaan butir nomor ${idx + 1}`,
-                  options: Array.isArray(item.options) ? item.options : [],
-                  correctAnswer: item.correctAnswer || item.answer || 'Kunci jawaban terlampir',
+                  options: normalizedOptions,
+                  correctAnswer: finalCorrect || 'Kunci jawaban terlampir',
                   discussion: item.discussion || item.explanation || 'Pembahasan materi terkait konsep esensial kurikulum.',
                   cognitiveLevel: item.cognitiveLevel || (idx % 3 === 0 ? 'C4' : idx % 3 === 1 ? 'C3' : 'C2'),
                   indicator: item.indicator || `Mengukur pemahaman konsep ${topic || subject}`,
-                  score: item.score || (itemType === 'Uraian' ? 5 : itemType === 'Isian Singkat' ? 2 : 1)
+                  score: item.score || (itemType === 'Uraian' ? 3 : itemType === 'Isian Singkat' ? 2 : 1)
                 };
               });
 

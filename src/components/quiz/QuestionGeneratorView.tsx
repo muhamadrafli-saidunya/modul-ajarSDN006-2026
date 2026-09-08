@@ -126,7 +126,64 @@ export const QuestionGeneratorView: React.FC = () => {
   // Generation & Results State
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [generationStepText, setGenerationStepText] = useState<string>('');
-  const [generatedExam, setGeneratedExam] = useState<GeneratedExam | null>(null);
+  const [generatedExam, setGeneratedExam] = useState<GeneratedExam | null>(() => {
+    // Sedia instrumen asesmen lengkap sejak awal saat dibuka di webapp
+    const initSubject = 'IPAS';
+    const initGrade = '4';
+    const initFase = 'Fase B';
+    const initTp = 'Peserta didik menganalisis proses fotosintesis pada tumbuhan serta mengidentifikasi faktor-faktor yang mempengaruhinya.';
+    const initTopic = 'Fotosintesis & Bagian Tumbuhan';
+    const initQuestions = generateOfflineQuestions(
+      initSubject,
+      initGrade,
+      initTp,
+      initTopic,
+      'Pilihan Ganda',
+      5,
+      'HOTS (C4-C6)'
+    );
+
+    return {
+      id: `exam-sample-ready`,
+      title: `Asesmen Sumatif ${initSubject} Kelas ${initGrade}`,
+      subject: initSubject,
+      grade: initGrade,
+      fase: initFase,
+      semester: 'Semester 1 (Ganjil)',
+      academicYear: '2025/2026',
+      tp: initTp,
+      topic: initTopic,
+      questionType: 'Pilihan Ganda',
+      questionCount: initQuestions.length,
+      cognitiveLevel: 'HOTS (C4-C6)',
+      questionStyle: 'Bervariasi Penuh (Kasus, Tabel Data, Sebab-Akibat, Solusi & Komparasi)',
+      durationMinutes: 60,
+      kopConfig: {
+        showKop: true,
+        showSignature: false,
+        leftLogoUrl: '',
+        rightLogoUrl: '',
+        leftLogoSize: 72,
+        rightLogoSize: 72,
+        governmentHeader: 'PEMERINTAH KABUPATEN / KOTA',
+        departmentHeader: 'DINAS PENDIDIKAN DAN KEBUDAYAAN',
+        schoolName: 'SD NEGERI 01 MENTENG JAYA',
+        schoolAddress: 'Jl. Pendidikan No. 12',
+        schoolContact: 'Telp: (021) 1234567 • NPSN: 20108392',
+        signaturePlace: 'Jakarta',
+        signatureDate: '',
+        headmasterTitle: 'Kepala Sekolah',
+        headmasterName: 'Dra. Hj. Siti Rohmah, M.Pd.',
+        headmasterNip: '19720315 199603 2 003',
+        teacherTitle: 'Guru Pengampu / Penyusun',
+        teacherName: 'Budi Santoso, S.Pd.',
+        teacherNip: '19850412 201001 1 014',
+        showDigitalSignature: false,
+      },
+      questions: initQuestions,
+      createdAt: new Date().toISOString(),
+    };
+  });
   const [activeTab, setActiveTab] = useState<'naskah' | 'kunci' | 'kisi-kisi' | 'ljk'>('naskah');
   const [showAnswerInExam, setShowAnswerInExam] = useState<boolean>(false);
 
@@ -259,6 +316,12 @@ export const QuestionGeneratorView: React.FC = () => {
 
       setGeneratedExam(newExam);
       showToast(`Berhasil menyusun ${finalQuestions.length} butir soal dengan variasi pola & kunci jawaban!`, 'success');
+      setTimeout(() => {
+        const target = document.getElementById('exam-preview-panel');
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 120);
     } catch (err) {
       // Local fallback on any network failure
       const finalQuestions = generateOfflineQuestions(
@@ -291,6 +354,12 @@ export const QuestionGeneratorView: React.FC = () => {
       };
       setGeneratedExam(newExam);
       showToast(`Berhasil menyusun ${finalQuestions.length} butir soal bervariasi!`, 'success');
+      setTimeout(() => {
+        const target = document.getElementById('exam-preview-panel');
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 120);
     } finally {
       setIsGenerating(false);
       setGenerationStepText('');
@@ -813,7 +882,7 @@ export const QuestionGeneratorView: React.FC = () => {
         </div>
 
         {/* RIGHT COLUMN: GENERATED EXAM PREVIEW & ACTIONS */}
-        <div className="lg:col-span-7 space-y-4">
+        <div id="exam-preview-panel" className="lg:col-span-7 space-y-4">
           {generatedExam ? (
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
               {/* ACTION TOOLBAR */}
