@@ -1,0 +1,8 @@
+{
+  "name": "Modul Pembelajaran SD006 2026",
+  "description": "Aplikasi Manajemen dan Generator Perangkat Ajar Sekolah Dasar Terpadu Kurikulum Merdeka \u0026 K13 dengan Desain Modern Biru-Orange",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
