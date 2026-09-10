@@ -2127,61 +2127,39 @@ export function generateExamPaperHtml(
     ? generateSignatureBlockHtml(exam.kopConfig, exam.kopConfig.schoolName)
     : '';
 
-  const examHeading = title || `ASESMEN SUMATIF / PENILAIAN LINGKUP MATERI`;
+  const examHeading = title || exam.title || `ASESMEN SUMATIF ${exam.subject.toUpperCase()}`;
 
   return `
   <div class="exam-paper-container bg-white p-4 sm:p-8 font-serif text-black leading-relaxed" style="font-family: 'Times New Roman', Times, serif; font-size: 11pt; color: #000; width: 100%; max-width: 800px; margin: 0 auto;">
     ${kopHtml}
 
     <!-- JUDUL DAN IDENTITAS UJIAN -->
-    <div style="text-align: center; margin-bottom: 18px;">
-      <h3 style="margin: 0; font-size: 13pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; text-decoration: underline;">
+    <div style="text-align: center; margin-bottom: 14px;">
+      <h3 style="margin: 0; font-size: 13pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; color: #000;">
         ${examHeading}
       </h3>
-      <div style="font-size: 10.5pt; font-weight: 600; margin-top: 3px;">
-        TAHUN AJARAN ${exam.academicYear} • SEMESTER ${exam.semester === 1 ? '1 (GANJIL)' : '2 (GENAP)'}
+      <div style="font-size: 10pt; font-weight: bold; margin-top: 3px; color: #000;">
+        TAHUN AJARAN ${exam.academicYear || '2025/2026'} &bull; SEMESTER ${exam.semester === 1 ? '1 (GANJIL)' : '2 (GENAP)'}
       </div>
     </div>
 
     <!-- TABEL IDENTITAS SISWA & MATA PELAJARAN -->
-    <table class="no-border" style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 10pt; border: 1px solid #000; padding: 6px;">
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 10pt; border: 1.5px solid #000;">
       <tbody>
-        <tr>
-          <td style="width: 18%; padding: 4px 6px; font-weight: bold; border: none;">Mata Pelajaran</td>
-          <td style="width: 32%; padding: 4px 6px; border: none;">: <strong>${exam.subject}</strong></td>
-          <td style="width: 18%; padding: 4px 6px; font-weight: bold; border: none;">Nama Siswa</td>
-          <td style="width: 32%; padding: 4px 6px; border: none;">: ....................................................</td>
+        <tr style="border-bottom: 1px solid #000;">
+          <td style="width: 18%; padding: 5px 8px; font-weight: bold; border-right: 1px solid #000; background-color: #f8fafc;">Mata Pelajaran</td>
+          <td style="width: 32%; padding: 5px 8px; border-right: 1.5px solid #000;">: <strong>${exam.subject}</strong></td>
+          <td style="width: 18%; padding: 5px 8px; font-weight: bold; border-right: 1px solid #000; background-color: #f8fafc;">Nama Siswa</td>
+          <td style="width: 32%; padding: 5px 8px;">: ....................................................</td>
         </tr>
         <tr>
-          <td style="padding: 4px 6px; font-weight: bold; border: none;">Kelas / Fase</td>
-          <td style="padding: 4px 6px; border: none;">: Kelas ${exam.grade} (${exam.fase})</td>
-          <td style="padding: 4px 6px; font-weight: bold; border: none;">Nomor Absen</td>
-          <td style="padding: 4px 6px; border: none;">: ....................................................</td>
-        </tr>
-        <tr>
-          <td style="padding: 4px 6px; font-weight: bold; border: none;">Alokasi Waktu</td>
-          <td style="padding: 4px 6px; border: none;">: ${exam.durationMinutes || 60} Menit</td>
-          <td style="padding: 4px 6px; font-weight: bold; border: none;">Hari / Tanggal</td>
-          <td style="padding: 4px 6px; border: none;">: ....................................................</td>
-        </tr>
-        <tr>
-          <td style="padding: 4px 6px; font-weight: bold; border: none;">Lingkup Materi</td>
-          <td style="padding: 4px 6px; border: none;" colspan="3">: <em>${exam.topic || exam.tp}</em></td>
+          <td style="padding: 5px 8px; font-weight: bold; border-right: 1px solid #000; background-color: #f8fafc;">Kelas / Fase</td>
+          <td style="padding: 5px 8px; border-right: 1.5px solid #000;">: Kelas ${exam.grade} (${exam.fase})</td>
+          <td style="padding: 5px 8px; font-weight: bold; border-right: 1px solid #000; background-color: #f8fafc;">Alokasi Waktu</td>
+          <td style="padding: 5px 8px;">: ${exam.durationMinutes || 60} Menit</td>
         </tr>
       </tbody>
     </table>
-
-    <!-- PETUNJUK UMUM -->
-    <div style="background-color: #f8fafc; border: 1px dashed #64748b; padding: 8px 12px; margin-bottom: 20px; font-size: 9.5pt;">
-      <strong>Petunjuk Pengerjaan:</strong>
-      <ol style="margin: 3px 0 0 18px; padding: 0;">
-        <li>Berdoalah sebelum memulai mengerjakan soal.</li>
-        <li>Tuliskan nama lengkap, nomor absen, dan kelas pada kolom lembar identitas yang telah disediakan.</li>
-        <li>Bacalah setiap stimulus bacaan dan butir pertanyaan dengan saksama sebelum menjawab.</li>
-        <li>Kerjakan soal yang kamu anggap paling mudah terlebih dahulu secara mandiri dan jujur.</li>
-        <li>Periksa kembali seluruh jawabanmu dengan teliti sebelum diserahkan kepada Bapak/Ibu Guru.</li>
-      </ol>
-    </div>
 
     <!-- BUTIR-BUTIR SOAL RESMI -->
     <div class="questions-list space-y-5" style="margin-top: 10px;">
@@ -2512,28 +2490,22 @@ export function generateStudentAnswerSheetHtml(exam: GeneratedExam): string {
     </div>
 
     <!-- KOLOM IDENTITAS SISWA -->
-    <div style="border: 1px solid #000; padding: 8px 12px; margin-bottom: 18px;">
+    <div style="border: 1.5px solid #000; padding: 8px 12px; margin-bottom: 18px;">
       <table style="width: 100%; border-collapse: collapse; border: none; font-size: 10pt;">
         <tbody>
           <tr>
-            <td style="width: 15%; padding: 3px; border: none; font-weight: bold;">Nama Lengkap</td>
-            <td style="width: 45%; padding: 3px; border: none;">: ....................................................</td>
-            <td style="width: 15%; padding: 3px; border: none; font-weight: bold;">Nilai Perolehan</td>
-            <td style="width: 25%; padding: 3px; border: none; text-align: center;" rowspan="2">
+            <td style="width: 18%; padding: 4px; border: none; font-weight: bold;">Nama Lengkap</td>
+            <td style="width: 42%; padding: 4px; border: none;">: ....................................................</td>
+            <td style="width: 15%; padding: 4px; border: none; font-weight: bold;">Nilai Perolehan</td>
+            <td style="width: 25%; padding: 4px; border: none; text-align: center;" rowspan="2">
               <div style="border: 2px solid #000; width: 80px; height: 48px; margin: 0 auto; display: flex; align-items: center; justify-content: center; font-size: 18pt; font-weight: bold;">
               </div>
             </td>
           </tr>
           <tr>
-            <td style="padding: 3px; border: none; font-weight: bold;">Nomor Absen</td>
-            <td style="padding: 3px; border: none;">: ....................................................</td>
-            <td style="padding: 3px; border: none; font-weight: bold;">Paraf Guru</td>
-          </tr>
-          <tr>
-            <td style="padding: 3px; border: none; font-weight: bold;">Hari / Tanggal</td>
-            <td style="padding: 3px; border: none;">: ....................................................</td>
-            <td style="padding: 3px; border: none; font-weight: bold;">Catatan Guru</td>
-            <td style="padding: 3px; border: none;">: ...................................</td>
+            <td style="padding: 4px; border: none; font-weight: bold;">Kelas / Fase</td>
+            <td style="padding: 4px; border: none;">: Kelas ${exam.grade} (${exam.fase})</td>
+            <td style="padding: 4px; border: none; font-weight: bold;">Paraf Guru</td>
           </tr>
         </tbody>
       </table>

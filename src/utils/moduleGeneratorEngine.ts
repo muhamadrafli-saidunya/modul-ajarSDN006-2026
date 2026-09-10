@@ -64,7 +64,7 @@ export function generateKopSuratHtml(config?: Partial<KopConfig>, schoolFallback
   const rightSize = c.rightLogoSize || 70;
 
   return `<!-- KOP_SURAT_START -->
-  <div class="kop-surat-official pb-3 mb-6" style="border-bottom: 3px double #000000; font-family: 'Times New Roman', 'Liberation Serif', serif; color: #000000; width: 100%;">
+  <div class="kop-surat-official mb-5" style="font-family: 'Times New Roman', 'Liberation Serif', serif; color: #000000; width: 100%;">
     <table class="kop-table" style="width: 100%; border-collapse: collapse; border: none; margin: 0; padding: 0;">
       <tbody>
         <tr style="border: none;">
@@ -92,8 +92,8 @@ export function generateKopSuratHtml(config?: Partial<KopConfig>, schoolFallback
         </tr>
       </tbody>
     </table>
-    <div style="border-bottom: 2.5px solid #000; margin-top: 6px;"></div>
-    <div style="border-bottom: 1px solid #000; margin-top: 1.5px;"></div>
+    <div style="border-bottom: 2.5px solid #000; margin-top: 8px;"></div>
+    <div style="border-bottom: 1px solid #000; margin-top: 2px; margin-bottom: 8px;"></div>
   </div>
   <!-- KOP_SURAT_END -->`;
 }
