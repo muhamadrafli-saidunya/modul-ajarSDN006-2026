@@ -12,7 +12,8 @@ import {
   ChevronRight,
   School,
   ExternalLink,
-  FileQuestion
+  FileQuestion,
+  FileSpreadsheet
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -53,6 +54,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       badge: 'BARU',
       badgeColor: 'bg-emerald-500 text-white',
       description: 'Naskah, Kisi-Kisi & Cetak',
+    },
+    {
+      id: 'google-sheets',
+      label: 'Google Sheets & Drive',
+      icon: FileSpreadsheet,
+      badge: 'Cloud',
+      badgeColor: 'bg-emerald-600 text-white',
+      description: 'Ekspor Naskah & Nilai',
     },
     {
       id: 'curriculum',

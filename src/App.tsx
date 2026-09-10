@@ -18,6 +18,9 @@ import { CurriculumGuideView } from './components/curriculum/CurriculumGuideView
 import { AssessmentBankView } from './components/assessment/AssessmentBankView';
 import { ProtaPromesView } from './components/protapromes/ProtaPromesView';
 import { ProfileView } from './components/profile/ProfileView';
+import { GoogleSheetsView } from './components/google/GoogleSheetsView';
+import { GoogleAuthProvider } from './context/GoogleAuthContext';
+import { GoogleSheetsModal } from './components/google/GoogleSheetsModal';
 
 const MainLayout: React.FC = () => {
   const { currentView, userProfile } = useApp();
@@ -43,6 +46,9 @@ const MainLayout: React.FC = () => {
         return <ProtaPromesView />;
       case 'profile':
         return <ProfileView />;
+      case 'google-sheets':
+      case 'googlesheets':
+        return <GoogleSheetsView />;
       default:
         return <DashboardView />;
     }
@@ -90,6 +96,7 @@ const MainLayout: React.FC = () => {
       <ModuleFormModal />
       <PrintPreviewModal />
       <DatabaseBackupRestoreModal />
+      <GoogleSheetsModal />
       <DeleteConfirmModal />
       <ToastNotification />
     </div>
@@ -99,7 +106,9 @@ const MainLayout: React.FC = () => {
 export default function App() {
   return (
     <AppProvider>
-      <MainLayout />
+      <GoogleAuthProvider>
+        <MainLayout />
+      </GoogleAuthProvider>
     </AppProvider>
   );
 }

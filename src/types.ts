@@ -203,7 +203,13 @@ export type QuestionType =
   | 'Benar/Salah'
   | 'Campuran';
 
-export type CognitiveLevel = 'LOTS (C1-C2)' | 'MOTS (C3)' | 'HOTS (C4-C6)' | 'Proporsional (Campuran)';
+export type CognitiveLevel =
+  | 'Paling Mudah (C1 Mengingat)'
+  | 'Mudah (C2 Memahami)'
+  | 'LOTS (C1-C2)'
+  | 'MOTS (C3)'
+  | 'HOTS (C4-C6)'
+  | 'Proporsional (Campuran)';
 
 export interface QuestionItem {
   id: string;
@@ -218,6 +224,16 @@ export interface QuestionItem {
   indicator: string;
   score: number;
   pattern?: string; // Pola variasi: "Studi Kasus", "Analisis Data/Tabel", "Sebab-Akibat", "Pemecahan Masalah", "Komparasi", "Dialog Murid", dll.
+  tpRef?: string; // Tujuan Pembelajaran spesifik untuk butir soal ini (berguna pada asesmen gabungan seluruh TP)
+  topicRef?: string; // Lingkup materi spesifik untuk butir soal ini
+}
+
+export interface MultiTpItemConfig {
+  id: string;
+  tp: string;
+  topic: string;
+  count: number;
+  enabled: boolean;
 }
 
 export interface GeneratedExam {
@@ -226,10 +242,12 @@ export interface GeneratedExam {
   subject: string;
   grade: string;
   fase: string;
-  semester: number;
+  semester: number | string;
   academicYear: string;
   tp: string;
   topic: string;
+  multiTpConfigs?: MultiTpItemConfig[]; // Konfigurasi detail jika dibuat dari seluruh TP
+  isMultiTp?: boolean;
   questionType: QuestionType;
   questionCount: number;
   cognitiveLevel: string;

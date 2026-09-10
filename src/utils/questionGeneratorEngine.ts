@@ -240,8 +240,30 @@ export function generateOfflineQuestions(
       type = 'Benar/Salah';
     }
 
-    const cognLevel: QuestionItem['cognitiveLevel'] =
-      i % 3 === 0 ? 'C4' : i % 3 === 1 ? 'C3' : 'C2';
+    const isPalingMudah =
+      cognitiveLevel.includes('C1') ||
+      cognitiveLevel.toLowerCase().includes('paling mudah') ||
+      cognitiveLevel.toLowerCase().includes('mengingat');
+    const isMudah = cognitiveLevel.includes('C2') && !cognitiveLevel.includes('C1-C2');
+    const isLots = cognitiveLevel.includes('LOTS') || cognitiveLevel.includes('C1-C2');
+    const isMots = cognitiveLevel.includes('MOTS') || cognitiveLevel.includes('C3');
+    const isHots = cognitiveLevel.includes('HOTS') || cognitiveLevel.includes('C4');
+
+    let cognLevel: QuestionItem['cognitiveLevel'] = 'C3';
+    if (isPalingMudah) {
+      cognLevel = 'C1';
+    } else if (isMudah) {
+      cognLevel = 'C2';
+    } else if (isLots) {
+      cognLevel = i % 2 === 0 ? 'C1' : 'C2';
+    } else if (isMots) {
+      cognLevel = 'C3';
+    } else if (isHots) {
+      cognLevel = i % 3 === 0 ? 'C5' : 'C4';
+    } else {
+      // Proporsional / Campuran seimbang
+      cognLevel = i % 5 === 1 ? 'C1' : i % 5 === 2 ? 'C2' : i % 5 === 3 ? 'C3' : i % 5 === 4 ? 'C4' : 'C5';
+    }
 
     let qItem: QuestionItem;
 
@@ -262,7 +284,11 @@ export function generateOfflineQuestions(
     questions.push(qItem);
   }
 
-  return questions;
+  return questions.map(q => ({
+    ...q,
+    tpRef: q.tpRef || tp,
+    topicRef: q.topicRef || effectiveTopic,
+  }));
 }
 
 // Helper to format options with rotated correct answer position
@@ -291,6 +317,420 @@ function buildRotatedOptions(
   return { options, correctAnswer };
 }
 
+function generateSampleC1PG(
+  num: number,
+  subject: string,
+  grade: string,
+  topic: string,
+  tp: string,
+  targetPos: number
+): QuestionItem {
+  const subjLower = subject.toLowerCase();
+  const variant = (num - 1) % 6;
+
+  // MATEMATIKA (C1 - Paling Mudah: Mengingat Simbol, Nilai Tempat, Rumus & Bilangan Dasar)
+  if (subjLower.includes('matematika')) {
+    if (variant === 0) {
+      const opt = buildRotatedOptions('950', ['905', '590', '955'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Mengingat Lambang Bilangan',
+        stimulus: 'Bilangan cacah dipelajari dalam kehidupan sehari-hari.',
+        question: 'Lambang bilangan dari "sembilan ratus lima puluh" adalah...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: 'Sembilan ratus lima puluh ditulis dengan lambang bilangan 950.',
+        cognitiveLevel: 'C1',
+        indicator: 'Disajikan nama bilangan, peserta didik dapat mengingat dan menentukan lambang bilangannya dengan tepat.',
+        score: 1,
+      };
+    } else if (variant === 1) {
+      const opt = buildRotatedOptions('Segitiga', ['Persegi', 'Lingkaran', 'Trapesium'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Pengenalan Bangun Datar',
+        stimulus: 'Bangun datar dibatasi oleh ruas garis lurus.',
+        question: 'Nama bangun datar yang memiliki tepat 3 buah sisi dan 3 titik sudut adalah...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: 'Segitiga adalah bangun datar bersisi tiga dengan tiga titik sudut.',
+        cognitiveLevel: 'C1',
+        indicator: 'Disajikan ciri bangun datar bersisi tiga, peserta didik dapat menyebutkan nama bangunnya.',
+        score: 1,
+      };
+    } else if (variant === 2) {
+      const opt = buildRotatedOptions('42', ['36', '48', '40'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Hafalan Perkalian Dasar',
+        stimulus: 'Fakta perkalian dasar sebagai dasar operasi hitung matematika.',
+        question: 'Hasil dari 6 × 7 adalah...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: '6 × 7 = 42.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat mengingat fakta perkalian bilangan dasar satu angka.',
+        score: 1,
+      };
+    } else if (variant === 3) {
+      const opt = buildRotatedOptions('Sudut siku-siku', ['Sudut lancip', 'Sudut tumpul', 'Sudut lurus'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Pengenalan Jenis Sudut',
+        stimulus: 'Besar sudut diukur dalam satuan derajat (°).',
+        question: 'Nama sudut yang besarnya tepat 90° adalah...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: 'Sudut yang berukuran 90 derajat dinamakan sudut siku-siku.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat menyebutkan nama sudut siku-siku berukuran 90°.',
+        score: 1,
+      };
+    } else if (variant === 4) {
+      const opt = buildRotatedOptions('1.000 gram', ['100 gram', '500 gram', '10.000 gram'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Mengingat Satuan Baku',
+        stimulus: 'Satuan berat standar digunakan dalam penimbangan barang.',
+        question: 'Berat 1 kilogram (kg) setara dengan...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: '1 kilogram setara dengan 1.000 gram.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat mengingat kesetaraan satuan berat kilogram ke gram.',
+        score: 1,
+      };
+    } else {
+      const opt = buildRotatedOptions('Ratusan', ['Ribuan', 'Puluhan', 'Satuan'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Mengingat Nilai Tempat',
+        stimulus: 'Bilangan 4.825 tersusun dari ribuan, ratusan, puluhan, dan satuan.',
+        question: 'Pada bilangan 4.825, angka 8 menempati nilai tempat...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: 'Angka 4 menempati ribuan, 8 ratusan, 2 puluhan, dan 5 satuan.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat menyebutkan nilai tempat suatu angka pada bilangan cacah.',
+        score: 1,
+      };
+    }
+  }
+
+  // BAHASA INDONESIA (C1 - Paling Mudah: Mengingat Tanda Baca, Kata Tanya, Istilah Dasar)
+  if (subjLower.includes('bahasa') || subjLower.includes('indonesia')) {
+    if (variant === 0) {
+      const opt = buildRotatedOptions('Titik (.)', ['Tanya (?)', 'Seru (!)', 'Koma (,)'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Mengingat Tanda Baca Dasar',
+        stimulus: 'Kalimat berita menyampaikan informasi kepada pembaca.',
+        question: 'Tanda baca yang digunakan untuk mengakhiri kalimat berita adalah tanda...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: 'Kalimat berita secara baku diakhiri dengan tanda baca titik (.).',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat mengingat tanda baca pengakhir kalimat berita.',
+        score: 1,
+      };
+    } else if (variant === 1) {
+      const opt = buildRotatedOptions('Di mana', ['Kapan', 'Siapa', 'Mengapa'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Mengingat Kata Tanya',
+        stimulus: 'Kata tanya digunakan untuk menggali informasi dari suatu teks bacaan.',
+        question: 'Kata tanya yang digunakan untuk menanyakan tempat terjadinya suatu peristiwa adalah...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: 'Kata tanya "Di mana" digunakan khusus untuk menanyakan keterangan tempat.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat menyebutkan kata tanya untuk menanyakan tempat.',
+        score: 1,
+      };
+    } else if (variant === 2) {
+      const opt = buildRotatedOptions('Fabel', ['Legenda', 'Mite', 'Sage'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Mengingat Jenis Cerita Fiksi',
+        stimulus: 'Cerita rakyat dan dongeng memiliki beragam jenis sesuai perwatakan tokohnya.',
+        question: 'Cerita fiksi yang tokoh-tokohnya diperankan oleh binatang dan dapat berbicara dinamakan...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: 'Fabel adalah dongeng tentang hewan/binatang yang berperilaku seperti manusia.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat mengingat istilah cerita fiksi binatang (fabel).',
+        score: 1,
+      };
+    } else if (variant === 3) {
+      const opt = buildRotatedOptions('Malas', ['Pintar', 'Pandai', 'Tertib'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Mengingat Antonim Kata',
+        stimulus: 'Antonim adalah kata-kata yang maknanya saling berlawanan.',
+        question: 'Lawan kata (antonim) dari kata "rajin" adalah...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: 'Lawan kata dari rajin adalah malas.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat menyebutkan lawan kata dari kata sifat dasar.',
+        score: 1,
+      };
+    } else if (variant === 4) {
+      const opt = buildRotatedOptions('Baca', ['Membaca', 'Membacakan', 'Pembaca'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Mengingat Kata Dasar',
+        stimulus: 'Kata berimbuhan dibentuk dari kata dasar.',
+        question: 'Kata dasar dari kata berimbuhan "membaca" adalah...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: 'Kata dasar dari membaca adalah baca.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat menyebutkan kata dasar suatu kata kerja.',
+        score: 1,
+      };
+    } else {
+      const opt = buildRotatedOptions('Huruf Kapital', ['Huruf Miring', 'Huruf Tebal', 'Huruf Kecil'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Mengingat Kaidah Ejaan',
+        stimulus: 'Ejaan bahasa Indonesia mengatur penulisan huruf awal pada nama orang.',
+        question: 'Huruf yang digunakan pada awal penulisan nama orang dan kota adalah...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: 'Huruf kapital (huruf besar) wajib digunakan pada huruf pertama nama orang dan kota.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat mengingat kaidah penggunaan huruf kapital.',
+        score: 1,
+      };
+    }
+  }
+
+  // PENDIDIKAN PANCASILA / PKn (C1 - Paling Mudah: Mengingat Lambang Sila, Simbol Negara, Semboyan)
+  if (subjLower.includes('pancasila') || subjLower.includes('pkn')) {
+    if (variant === 0) {
+      const opt = buildRotatedOptions('Bintang', ['Rantai', 'Pohon Beringin', 'Kepala Banteng'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Mengingat Simbol Sila',
+        stimulus: 'Perisai burung Garuda memuat lambang lima sila Pancasila.',
+        question: 'Lambang sila pertama Pancasila, "Ketuhanan Yang Maha Esa" adalah...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: 'Sila pertama dilambangkan dengan Bintang emas bersudut lima.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat mengingat lambang sila pertama Pancasila.',
+        score: 1,
+      };
+    } else if (variant === 1) {
+      const opt = buildRotatedOptions('Pohon Beringin', ['Bintang', 'Rantai', 'Padi dan Kapas'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Mengingat Simbol Sila',
+        stimulus: 'Sila ketiga Pancasila menegaskan kebulatan persatuan seluruh rakyat Indonesia.',
+        question: 'Lambang sila ketiga Pancasila pada perisai Garuda adalah...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: 'Sila ketiga dilambangkan dengan Pohon Beringin.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat menyebutkan lambang sila ketiga Pancasila.',
+        score: 1,
+      };
+    } else if (variant === 2) {
+      const opt = buildRotatedOptions('Bhinneka Tunggal Ika', ['Tut Wuri Handayani', 'Bersatu Kita Teguh', 'Garuda Pancasila'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Mengingat Semboyan Bangsa',
+        stimulus: 'Kaki burung Garuda mencengkeram pita putih bertuliskan semboyan persatuan bangsa.',
+        question: 'Semboyan bangsa Indonesia yang tertulis pada pita burung Garuda adalah...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: 'Semboyan bangsa Indonesia adalah Bhinneka Tunggal Ika.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat mengingat semboyan persatuan bangsa Indonesia.',
+        score: 1,
+      };
+    } else if (variant === 3) {
+      const opt = buildRotatedOptions('Merah dan Putih', ['Merah dan Kuning', 'Putih dan Hijau', 'Merah dan Biru'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Mengingat Identitas Nasional',
+        stimulus: 'Bendera negara adalah simbol kedaulatan bangsa Indonesia.',
+        question: 'Warna bendera kebangsaan Negara Kesatuan Republik Indonesia adalah...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: 'Bendera negara Indonesia berwarna Merah dan Putih.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat mengingat warna bendera kebangsaan Indonesia.',
+        score: 1,
+      };
+    } else if (variant === 4) {
+      const opt = buildRotatedOptions('Indonesia Raya', ['Garuda Pancasila', 'Satu Nusa Satu Bangsa', 'Maju Tak Gentar'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Mengingat Lagu Kebangsaan',
+        stimulus: 'Lagu kebangsaan dikumandangkan pada upacara resmi kenegaraan.',
+        question: 'Lagu kebangsaan negara Republik Indonesia berjudul...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: 'Lagu kebangsaan Indonesia berjudul Indonesia Raya.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat mengingat judul lagu kebangsaan Indonesia.',
+        score: 1,
+      };
+    } else {
+      const opt = buildRotatedOptions('Pancasila', ['UUD 1945', 'Bhinneka Tunggal Ika', 'Kitab Sutasoma'], targetPos);
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Pilihan Ganda',
+        pattern: 'Mengingat Dasar Negara',
+        stimulus: 'Negara Indonesia memiliki dasar negara sebagai landasan hukum dan moral bangsa.',
+        question: 'Dasar negara Republik Indonesia adalah...',
+        options: opt.options,
+        correctAnswer: opt.correctAnswer,
+        discussion: 'Pancasila adalah dasar negara Republik Indonesia.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat menyebutkan dasar negara Republik Indonesia.',
+        score: 1,
+      };
+    }
+  }
+
+  // DEFAULT: IPAS / SAINS (C1 - Paling Mudah: Mengingat Organ, Zat Tumbuhan, Sumber Energi & Wujud Benda)
+  if (variant === 0) {
+    const opt = buildRotatedOptions('Klorofil', ['Stomata', 'Xilem', 'Floem'], targetPos);
+    return {
+      id: `q-${num}`,
+      number: num,
+      type: 'Pilihan Ganda',
+      pattern: 'Mengingat Istilah Sains Dasar',
+      stimulus: 'Daun tumbuhan pada umumnya berwarna hijau karena memiliki zat warna alami.',
+      question: 'Zat hijau daun yang berfungsi menyerap energi cahaya matahari disebut...',
+      options: opt.options,
+      correctAnswer: opt.correctAnswer,
+      discussion: 'Klorofil adalah zat hijau daun yang menyerap sinar matahari untuk proses fotosintesis.',
+      cognitiveLevel: 'C1',
+      indicator: 'Peserta didik dapat mengingat nama zat hijau daun (klorofil).',
+      score: 1,
+    };
+  } else if (variant === 1) {
+    const opt = buildRotatedOptions('Akar', ['Batang', 'Bunga', 'Buah'], targetPos);
+    return {
+      id: `q-${num}`,
+      number: num,
+      type: 'Pilihan Ganda',
+      pattern: 'Mengingat Bagian Tumbuhan',
+      stimulus: 'Tumbuhan memiliki organ penting yang menopang kehidupan di dalam tanah.',
+      question: 'Bagian tubuh tumbuhan yang bertugas menyerap air dan zat hara dari dalam tanah adalah...',
+      options: opt.options,
+      correctAnswer: opt.correctAnswer,
+      discussion: 'Akar berfungsi menyerap air dan unsur hara mineral dari dalam tanah.',
+      cognitiveLevel: 'C1',
+      indicator: 'Peserta didik dapat menyebutkan organ tumbuhan penyerap air tanah.',
+      score: 1,
+    };
+  } else if (variant === 2) {
+    const opt = buildRotatedOptions('Herbivora', ['Karnivora', 'Omnivora', 'Insektivora'], targetPos);
+    return {
+      id: `q-${num}`,
+      number: num,
+      type: 'Pilihan Ganda',
+      pattern: 'Mengingat Penggolongan Hewan',
+      stimulus: 'Hewan digolongkan berdasarkan jenis makanan utamanya.',
+      question: 'Hewan yang makanan utamanya berupa tumbuhan (rumput dan dedaunan) dinamakan...',
+      options: opt.options,
+      correctAnswer: opt.correctAnswer,
+      discussion: 'Herbivora adalah sebutan untuk hewan pemakan tumbuhan.',
+      cognitiveLevel: 'C1',
+      indicator: 'Peserta didik dapat mengingat istilah penggolongan hewan pemakan tumbuhan.',
+      score: 1,
+    };
+  } else if (variant === 3) {
+    const opt = buildRotatedOptions('Matahari', ['Bulan', 'Bintang', 'Lampu'], targetPos);
+    return {
+      id: `q-${num}`,
+      number: num,
+      type: 'Pilihan Ganda',
+      pattern: 'Mengingat Sumber Energi Alami',
+      stimulus: 'Bumi menerima limpahan energi alam yang menghangatkan suasana siang hari.',
+      question: 'Sumber energi panas dan cahaya terbesar bagi kehidupan di bumi adalah...',
+      options: opt.options,
+      correctAnswer: opt.correctAnswer,
+      discussion: 'Matahari adalah sumber energi panas dan cahaya terbesar di tata surya bagi bumi.',
+      cognitiveLevel: 'C1',
+      indicator: 'Peserta didik dapat mengingat sumber energi panas dan cahaya utama bumi.',
+      score: 1,
+    };
+  } else if (variant === 4) {
+    const opt = buildRotatedOptions('Membeku', ['Mencair', 'Menguap', 'Mengembun'], targetPos);
+    return {
+      id: `q-${num}`,
+      number: num,
+      type: 'Pilihan Ganda',
+      pattern: 'Mengingat Perubahan Wujud Zat',
+      stimulus: 'Air murni yang dimasukkan ke dalam ruang pembeku es akan berubah menjadi bongkahan es.',
+      question: 'Perubahan wujud benda dari zat cair menjadi padat disebut...',
+      options: opt.options,
+      correctAnswer: opt.correctAnswer,
+      discussion: 'Membeku adalah proses perubahan wujud zat dari cair menjadi padat.',
+      cognitiveLevel: 'C1',
+      indicator: 'Peserta didik dapat menyebutkan nama proses perubahan wujud cair menjadi padat.',
+      score: 1,
+    };
+  } else {
+    const opt = buildRotatedOptions('Jantung', ['Paru-paru', 'Lambung', 'Ginjal'], targetPos);
+    return {
+      id: `q-${num}`,
+      number: num,
+      type: 'Pilihan Ganda',
+      pattern: 'Mengingat Organ Tubuh Manusia',
+      stimulus: 'Sistem sirkulasi tubuh manusia didukung oleh organ berotot kuat di dalam dada.',
+      question: 'Organ tubuh manusia yang berfungsi utama untuk memompa darah ke seluruh tubuh adalah...',
+      options: opt.options,
+      correctAnswer: opt.correctAnswer,
+      discussion: 'Jantung berfungsi memompa darah ke seluruh bagian tubuh.',
+      cognitiveLevel: 'C1',
+      indicator: 'Peserta didik dapat menyebutkan nama organ pemompa darah pada manusia.',
+      score: 1,
+    };
+  }
+}
+
 function generateSamplePG(
   num: number,
   subject: string,
@@ -301,6 +741,11 @@ function generateSamplePG(
 ): QuestionItem {
   const patternIndex = (num - 1) % 8;
   const targetPos = (num * 3 + 1) % 4; // Cycles through B, A, D, C, etc.
+
+  // Jika target level adalah C1 (Paling Mudah), gunakan bank soal mengingat dasar
+  if (cognLevel === 'C1') {
+    return generateSampleC1PG(num, subject, grade, topic, tp, targetPos);
+  }
 
   // 1. MATEMATIKA
   if (subject.toLowerCase().includes('matematika')) {
@@ -1097,6 +1542,284 @@ function generateSamplePGK(
   }
 }
 
+function generateSampleC1Isian(
+  num: number,
+  subject: string,
+  grade: string,
+  topic: string,
+  tp: string
+): QuestionItem {
+  const subjLower = subject.toLowerCase();
+  const variant = (num - 1) % 4;
+
+  if (subjLower.includes('matematika')) {
+    if (variant === 0) {
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Isian Singkat',
+        pattern: 'Hafalan Perkalian Dasar',
+        stimulus: 'Fakta dasar perkalian bilangan satu angka.',
+        question: 'Hasil perkalian dari 8 × 5 adalah ....................................................',
+        correctAnswer: '40',
+        discussion: '8 × 5 = 40.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat mengingat dan menuliskan hasil perkalian bilangan dasar.',
+        score: 2,
+      };
+    } else if (variant === 1) {
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Isian Singkat',
+        pattern: 'Pengenalan Bangun Datar',
+        stimulus: 'Bangun datar yang dibatasi oleh tiga garis lurus.',
+        question: 'Bangun datar yang memiliki 3 buah sisi dan 3 titik sudut disebut ....................................................',
+        correctAnswer: 'Segitiga',
+        discussion: 'Segitiga adalah bangun datar dengan tiga sisi dan tiga sudut.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat menyebutkan nama bangun datar bersisi tiga.',
+        score: 2,
+      };
+    } else if (variant === 2) {
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Isian Singkat',
+        pattern: 'Pengenalan Jenis Sudut',
+        stimulus: 'Sudut berukuran tegak lurus.',
+        question: 'Sudut yang besarnya tepat 90 derajat dinamakan sudut ....................................................',
+        correctAnswer: 'Siku-siku',
+        discussion: 'Sudut 90 derajat dinamakan sudut siku-siku.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat mengingat nama sudut siku-siku.',
+        score: 2,
+      };
+    } else {
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Isian Singkat',
+        pattern: 'Kesetaraan Satuan Baku',
+        stimulus: 'Satuan panjang baku dalam meter dan sentimeter.',
+        question: 'Panjang 1 meter setara dengan ............................ sentimeter (cm).',
+        correctAnswer: '100 cm',
+        discussion: '1 meter = 100 sentimeter.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat mengingat konversi satuan panjang meter ke sentimeter.',
+        score: 2,
+      };
+    }
+  }
+
+  if (subjLower.includes('pancasila') || subjLower.includes('pkn')) {
+    if (variant === 0) {
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Isian Singkat',
+        pattern: 'Mengingat Dasar Negara',
+        stimulus: 'Landasan falsafah bangsa Indonesia.',
+        question: 'Dasar negara Republik Indonesia yang memiliki lima sila adalah ....................................................',
+        correctAnswer: 'Pancasila',
+        discussion: 'Pancasila adalah dasar dan ideologi negara Indonesia.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat menyebutkan dasar negara Republik Indonesia.',
+        score: 2,
+      };
+    } else if (variant === 1) {
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Isian Singkat',
+        pattern: 'Mengingat Simbol Sila',
+        stimulus: 'Lambang sila pertama pada perisai burung Garuda.',
+        question: 'Lambang sila pertama Pancasila, "Ketuhanan Yang Maha Esa" adalah ....................................................',
+        correctAnswer: 'Bintang (atau Bintang Emas)',
+        discussion: 'Sila pertama dilambangkan dengan Bintang emas bersudut lima.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat mengingat simbol sila pertama Pancasila.',
+        score: 2,
+      };
+    } else if (variant === 2) {
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Isian Singkat',
+        pattern: 'Mengingat Semboyan Negara',
+        stimulus: 'Semboyan persatuan pada pita burung Garuda.',
+        question: 'Semboyan persatuan bangsa Indonesia yang tertulis pada pita burung Garuda adalah ....................................................',
+        correctAnswer: 'Bhinneka Tunggal Ika',
+        discussion: 'Bhinneka Tunggal Ika berarti berbeda-beda tetapi tetap satu jua.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat mengingat semboyan persatuan bangsa Indonesia.',
+        score: 2,
+      };
+    } else {
+      return {
+        id: `q-${num}`,
+        number: num,
+        type: 'Isian Singkat',
+        pattern: 'Mengingat Lagu Kebangsaan',
+        stimulus: 'Lagu kebangsaan resmi Indonesia.',
+        question: 'Lagu kebangsaan Republik Indonesia berjudul ....................................................',
+        correctAnswer: 'Indonesia Raya',
+        discussion: 'Lagu kebangsaan Indonesia berjudul Indonesia Raya ciptaan W.R. Soepratman.',
+        cognitiveLevel: 'C1',
+        indicator: 'Peserta didik dapat menuliskan judul lagu kebangsaan Indonesia.',
+        score: 2,
+      };
+    }
+  }
+
+  // DEFAULT: IPAS / SAINS
+  if (variant === 0) {
+    return {
+      id: `q-${num}`,
+      number: num,
+      type: 'Isian Singkat',
+      pattern: 'Mengingat Istilah Sains Dasar',
+      stimulus: 'Zat warna hijau alami pada daun.',
+      question: 'Zat hijau pada daun tumbuhan yang berfungsi menyerap cahaya matahari disebut ....................................................',
+      correctAnswer: 'Klorofil',
+      discussion: 'Klorofil adalah zat hijau daun yang berperan vital menyerap energi matahari.',
+      cognitiveLevel: 'C1',
+      indicator: 'Peserta didik dapat menyebutkan istilah zat hijau daun (klorofil).',
+      score: 2,
+    };
+  } else if (variant === 1) {
+    return {
+      id: `q-${num}`,
+      number: num,
+      type: 'Isian Singkat',
+      pattern: 'Mengingat Organ Tumbuhan',
+      stimulus: 'Bagian tumbuhan di dalam tanah.',
+      question: 'Bagian tumbuhan yang bertugas menyerap air dan zat hara dari dalam tanah adalah ....................................................',
+      correctAnswer: 'Akar',
+      discussion: 'Akar berfungsi utama menyerap air dan hara dari dalam tanah.',
+      cognitiveLevel: 'C1',
+      indicator: 'Peserta didik dapat menyebutkan nama organ tumbuhan penyerap air.',
+      score: 2,
+    };
+  } else if (variant === 2) {
+    return {
+      id: `q-${num}`,
+      number: num,
+      type: 'Isian Singkat',
+      pattern: 'Mengingat Sumber Energi',
+      stimulus: 'Pusat tata surya penghasil cahaya bumi.',
+      question: 'Sumber energi panas dan cahaya terbesar bagi bumi adalah ....................................................',
+      correctAnswer: 'Matahari',
+      discussion: 'Matahari adalah sumber energi panas dan cahaya terbesar bagi bumi.',
+      cognitiveLevel: 'C1',
+      indicator: 'Peserta didik dapat mengingat sumber energi panas dan cahaya utama bumi.',
+      score: 2,
+    };
+  } else {
+    return {
+      id: `q-${num}`,
+      number: num,
+      type: 'Isian Singkat',
+      pattern: 'Mengingat Penggolongan Hewan',
+      stimulus: 'Hewan pemakan rumput dan daun.',
+      question: 'Hewan yang makanan utamanya berupa tumbuhan dinamakan kelompok ....................................................',
+      correctAnswer: 'Herbivora',
+      discussion: 'Herbivora adalah sebutan untuk hewan pemakan tumbuhan.',
+      cognitiveLevel: 'C1',
+      indicator: 'Peserta didik dapat mengingat istilah hewan pemakan tumbuhan.',
+      score: 2,
+    };
+  }
+}
+
+function generateSampleC1Uraian(
+  num: number,
+  subject: string,
+  grade: string,
+  topic: string,
+  tp: string
+): QuestionItem {
+  const subjLower = subject.toLowerCase();
+  const variant = (num - 1) % 3;
+
+  if (subjLower.includes('pancasila') || subjLower.includes('pkn')) {
+    return {
+      id: `q-${num}`,
+      number: num,
+      type: 'Uraian',
+      pattern: 'Menyebutkan Lambang Sila Pancasila',
+      stimulus: 'Perisai burung Garuda memuat lima simbol sila dasar negara Indonesia.',
+      question: 'Sebutkan secara berurutan lambang dari sila pertama sampai sila kelima Pancasila!',
+      correctAnswer: 'Kunci Jawaban / Rubrik Penskoran:\n1. Sila ke-1: Bintang\n2. Sila ke-2: Rantai Emas\n3. Sila ke-3: Pohon Beringin\n4. Sila ke-4: Kepala Banteng\n5. Sila ke-5: Padi dan Kapas\n(Masing-masing berbobot skor 1; Total Skor 5)',
+      discussion: 'Menguji daya ingat peserta didik terhadap kelima lambang sila Pancasila.',
+      cognitiveLevel: 'C1',
+      indicator: 'Peserta didik dapat menyebutkan lima lambang sila Pancasila secara berurutan.',
+      score: 5,
+    };
+  }
+
+  if (subjLower.includes('matematika')) {
+    return {
+      id: `q-${num}`,
+      number: num,
+      type: 'Uraian',
+      pattern: 'Menyebutkan Nama Bangun Datar',
+      stimulus: 'Bangun datar memiliki beragam bentuk dalam geometri dasar.',
+      question: 'Sebutkan 4 (empat) contoh nama bangun datar yang kamu ketahui!',
+      correctAnswer: 'Kunci Jawaban / Rubrik Penskoran:\nSiswa menyebutkan 4 nama bangun datar dengan benar, misalnya: Persegi, Persegi Panjang, Segitiga, Lingkaran, Jajar Genjang, atau Trapesium (Skor masing-masing 1,25; Total Skor 5).',
+      discussion: 'Menguji ingatan dasar nama-nama bangun datar sederhana.',
+      cognitiveLevel: 'C1',
+      indicator: 'Peserta didik dapat menyebutkan 4 contoh nama bangun datar.',
+      score: 5,
+    };
+  }
+
+  // DEFAULT: IPAS / SAINS
+  if (variant === 0) {
+    return {
+      id: `q-${num}`,
+      number: num,
+      type: 'Uraian',
+      pattern: 'Menyebutkan Bagian Tubuh Tumbuhan',
+      stimulus: 'Tumbuhan tersusun atas beberapa organ tubuh yang dapat diamati secara langsung.',
+      question: 'Sebutkan 4 (empat) bagian utama pada tubuh tumbuhan!',
+      correctAnswer: 'Kunci Jawaban / Rubrik Penskoran:\nSiswa menyebutkan 4 bagian tumbuhan berikut:\n1. Akar\n2. Batang\n3. Daun\n4. Bunga / Buah / Biji\n(Masing-masing bernilai skor 1,25; Total Skor 5)',
+      discussion: 'Menguji recall ingatan organ dasar tumbuhan.',
+      cognitiveLevel: 'C1',
+      indicator: 'Peserta didik dapat menyebutkan 4 bagian tubuh utama tumbuhan.',
+      score: 5,
+    };
+  } else if (variant === 1) {
+    return {
+      id: `q-${num}`,
+      number: num,
+      type: 'Uraian',
+      pattern: 'Menyebutkan Wujud Benda',
+      stimulus: 'Benda di alam semesta dikelompokkan ke dalam tiga jenis wujud.',
+      question: 'Sebutkan 3 (tiga) macam wujud benda dan berikan masing-masing 1 (satu) contoh bendanya yang ada di kelas!',
+      correctAnswer: 'Kunci Jawaban / Rubrik Penskoran:\n1. Benda Padat (contoh: meja, kursi, buku) (Skor 2)\n2. Benda Cair (contoh: air minum, tinta spidol) (Skor 2)\n3. Benda Gas (contoh: udara di dalam ruangan) (Skor 1)',
+      discussion: 'Menguji ingatan terhadap tiga wujud benda dan contohnya.',
+      cognitiveLevel: 'C1',
+      indicator: 'Peserta didik dapat menyebutkan tiga wujud zat dan contohnya.',
+      score: 5,
+    };
+  } else {
+    return {
+      id: `q-${num}`,
+      number: num,
+      type: 'Uraian',
+      pattern: 'Menyebutkan Panca Indra Manusia',
+      stimulus: 'Manusia memiliki lima alat indra untuk mengenali lingkungan sekitar.',
+      question: 'Sebutkan 5 (lima) alat panca indra pada tubuh manusia!',
+      correctAnswer: 'Kunci Jawaban / Rubrik Penskoran:\n1. Mata (penglihatan)\n2. Telinga (pendengaran)\n3. Hidung (penciuman/pembau)\n4. Lidah (pengecap)\n5. Kulit (peraba)\n(Masing-masing bernilai skor 1; Total Skor 5)',
+      discussion: 'Menguji ingatan mengenai kelima organ panca indra manusia.',
+      cognitiveLevel: 'C1',
+      indicator: 'Peserta didik dapat menyebutkan kelima panca indra manusia.',
+      score: 5,
+    };
+  }
+}
+
 function generateSampleIsian(
   num: number,
   subject: string,
@@ -1105,6 +1828,9 @@ function generateSampleIsian(
   tp: string,
   cognLevel: QuestionItem['cognitiveLevel']
 ): QuestionItem {
+  if (cognLevel === 'C1') {
+    return generateSampleC1Isian(num, subject, grade, topic, tp);
+  }
   const variant = (num - 1) % 5;
   if (variant === 0) {
     return {
@@ -1187,6 +1913,9 @@ function generateSampleUraian(
   tp: string,
   cognLevel: QuestionItem['cognitiveLevel']
 ): QuestionItem {
+  if (cognLevel === 'C1') {
+    return generateSampleC1Uraian(num, subject, grade, topic, tp);
+  }
   const variant = (num - 1) % 4;
   if (variant === 0) {
     return {
@@ -1731,13 +2460,13 @@ export function generateKisiKisiHtml(exam: GeneratedExam): string {
               ${q.number}
             </td>
             <td style="border: 1px solid #000; padding: 5px 6px; line-height: 1.35;">
-              ${exam.tp}
+              ${q.tpRef || exam.tp}
             </td>
             <td style="border: 1px solid #000; padding: 5px 6px; line-height: 1.35;">
-              ${exam.topic || exam.subject}
+              ${q.topicRef || exam.topic || exam.subject}
             </td>
             <td style="border: 1px solid #000; padding: 5px 6px; line-height: 1.35;">
-              ${q.indicator || `Disajikan pertanyaan tentang ${exam.topic || exam.subject}, peserta didik dapat menjawab dengan benar.`}
+              ${q.indicator || `Disajikan pertanyaan tentang ${q.topicRef || exam.topic || exam.subject}, peserta didik dapat menjawab dengan benar.`}
             </td>
             <td style="border: 1px solid #000; padding: 5px 4px; text-align: center; font-size: 8pt; color: #1e293b; background-color: #fafafa;">
               ${q.pattern || 'Studi Kasus Kontekstual'}

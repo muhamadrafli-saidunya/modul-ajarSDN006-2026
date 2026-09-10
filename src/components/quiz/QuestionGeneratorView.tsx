@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   Sparkles,
@@ -15,6 +15,7 @@ import {
   Settings2,
   RefreshCw,
   Plus,
+  Minus,
   Trash2,
   Edit3,
   Eye,
@@ -24,9 +25,24 @@ import {
   FileText,
   Sliders,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  FileSpreadsheet,
+  Check,
+  CheckCheck,
+  Filter,
+  Search,
+  X,
+  AlertCircle,
 } from 'lucide-react';
-import { GeneratedExam, QuestionItem, QuestionType, KopConfig, TeachingModule } from '../../types';
+import { useGoogleAuth } from '../../context/GoogleAuthContext';
+import {
+  GeneratedExam,
+  QuestionItem,
+  QuestionType,
+  KopConfig,
+  TeachingModule,
+  MultiTpItemConfig,
+} from '../../types';
 import {
   RECOMMENDED_TPS,
   generateOfflineQuestions,
@@ -99,6 +115,50 @@ const QUESTION_TYPES: { type: QuestionType; label: string; desc: string; icon: s
   },
 ];
 
+// Helper to construct full TP list with configurable question counts for any subject
+function buildDefaultMultiTps(subj: string): MultiTpItemConfig[] {
+  const presets = RECOMMENDED_TPS[subj] || [];
+  if (presets.length > 0) {
+    const list: MultiTpItemConfig[] = [];
+    let counter = 1;
+    presets.forEach((group) => {
+      group.tpList.forEach((tpText) => {
+        list.push({
+          id: `tp-cfg-${counter++}`,
+          topic: group.topic,
+          tp: tpText,
+          count: 2, // Alokasi default 2 butir soal per TP
+          enabled: true,
+        });
+      });
+    });
+    return list;
+  }
+  return [
+    {
+      id: 'tp-cfg-1',
+      topic: `Materi Awal ${subj}`,
+      tp: `Peserta didik memahami konsep esensial dan terminologi dasar pada mata pelajaran ${subj}.`,
+      count: 2,
+      enabled: true,
+    },
+    {
+      id: 'tp-cfg-2',
+      topic: `Penerapan Konsep ${subj}`,
+      tp: `Peserta didik menerapkan prinsip dan prosedur untuk memecahkan masalah kontekstual pada mata pelajaran ${subj}.`,
+      count: 2,
+      enabled: true,
+    },
+    {
+      id: 'tp-cfg-3',
+      topic: `Nalar Kritis & Analisis ${subj}`,
+      tp: `Peserta didik menganalisis hubungan sebab-akibat, membandingkan data, dan mengevaluasi solusi pada materi ${subj}.`,
+      count: 3,
+      enabled: true,
+    },
+  ];
+}
+
 export const QuestionGeneratorView: React.FC = () => {
   const {
     userProfile,
@@ -112,6 +172,17 @@ export const QuestionGeneratorView: React.FC = () => {
     setSelectedTpPayload,
   } = useApp();
 
+  // Google Sheets Integration
+  const {
+    isConnected: isGoogleConnected,
+    signIn: signInGoogle,
+    exportExamToSheets,
+    setIsSheetsModalOpen,
+  } = useGoogleAuth();
+  const [isExportingSheets, setIsExportingSheets] = useState<boolean>(false);
+  const [showSheetsConfirmModal, setShowSheetsConfirmModal] = useState<boolean>(false);
+  const [exportedSheetsUrl, setExportedSheetsUrl] = useState<string | null>(null);
+
   // Form Configuration State
   const [subject, setSubject] = useState<string>('IPAS');
   const [customSubject, setCustomSubject] = useState<string>('');
@@ -121,7 +192,20 @@ export const QuestionGeneratorView: React.FC = () => {
   const [academicYear, setAcademicYear] = useState<string>(userProfile.academicYear || '2024/2025');
   const [durationMinutes, setDurationMinutes] = useState<number>(60);
 
-  // TP and Topic
+  // Exam Generation Mode: 'multi_tp' (Seluruh TP Gabungan) or 'single_tp' (Satu TP saja)
+  const [examMode, setExamMode] = useState<'multi_tp' | 'single_tp'>('multi_tp');
+  const [multiTpConfigs, setMultiTpConfigs] = useState<MultiTpItemConfig[]>(() =>
+    buildDefaultMultiTps('IPAS')
+  );
+
+  // Custom TP modal state & search filter
+  const [showAddCustomTpModal, setShowAddCustomTpModal] = useState<boolean>(false);
+  const [newCustomTpText, setNewCustomTpText] = useState<string>('');
+  const [newCustomTpTopic, setNewCustomTpTopic] = useState<string>('');
+  const [newCustomTpCount, setNewCustomTpCount] = useState<number>(3);
+  const [filterTpSearch, setFilterTpSearch] = useState<string>('');
+
+  // Single TP Mode fallback states
   const [tp, setTp] = useState<string>(
     'Peserta didik menganalisis hubungan antara bentuk serta fungsi bagian tubuh pada tumbuhan (akar, batang, daun, bunga).'
   );
@@ -135,6 +219,11 @@ export const QuestionGeneratorView: React.FC = () => {
     'Bervariasi Penuh (Kasus, Tabel Data, Sebab-Akibat, Solusi & Komparasi)'
   );
 
+  // Sync multiTpConfigs when subject changes
+  useEffect(() => {
+    setMultiTpConfigs(buildDefaultMultiTps(subject));
+  }, [subject]);
+
   // Synchronize when TP is selected from Curriculum Guide
   useEffect(() => {
     if (selectedTpPayload) {
@@ -145,6 +234,71 @@ export const QuestionGeneratorView: React.FC = () => {
       setSelectedTpPayload(null);
     }
   }, [selectedTpPayload, setSelectedTpPayload]);
+
+  // Computed Multi-TP stats
+  const activeMultiTps = useMemo(() => {
+    return multiTpConfigs.filter(it => it.enabled && it.count > 0);
+  }, [multiTpConfigs]);
+
+  const totalMultiQuestions = useMemo(() => {
+    return activeMultiTps.reduce((acc, it) => acc + (Number(it.count) || 0), 0);
+  }, [activeMultiTps]);
+
+  const filteredMultiTps = useMemo(() => {
+    if (!filterTpSearch.trim()) return multiTpConfigs;
+    const q = filterTpSearch.toLowerCase();
+    return multiTpConfigs.filter(
+      it => it.topic.toLowerCase().includes(q) || it.tp.toLowerCase().includes(q)
+    );
+  }, [multiTpConfigs, filterTpSearch]);
+
+  // Multi-TP interactive actions
+  const handleToggleTpItem = (id: string) => {
+    setMultiTpConfigs(prev =>
+      prev.map(it => (it.id === id ? { ...it, enabled: !it.enabled } : it))
+    );
+  };
+
+  const handleUpdateTpCount = (id: string, count: number) => {
+    const val = Math.max(1, Math.min(25, count));
+    setMultiTpConfigs(prev =>
+      prev.map(it => (it.id === id ? { ...it, count: val } : it))
+    );
+  };
+
+  const handleToggleAllTps = (selectAll: boolean) => {
+    setMultiTpConfigs(prev => prev.map(it => ({ ...it, enabled: selectAll })));
+    showToast(selectAll ? 'Semua TP berhasil diaktifkan!' : 'Pilihan semua TP dibatalkan.', 'info');
+  };
+
+  const handleSetUniformCount = (count: number) => {
+    setMultiTpConfigs(prev => prev.map(it => ({ ...it, count })));
+    showToast(`Alokasi butir soal semua TP diseragamkan menjadi ${count} butir!`, 'info');
+  };
+
+  const handleAddCustomTp = () => {
+    if (!newCustomTpText.trim()) {
+      showToast('Teks Tujuan Pembelajaran (TP) tidak boleh kosong!', 'error');
+      return;
+    }
+    const newItem: MultiTpItemConfig = {
+      id: `custom-tp-${Date.now()}`,
+      topic: newCustomTpTopic.trim() || `Topik Tambahan ${subject}`,
+      tp: newCustomTpText.trim(),
+      count: Math.max(1, newCustomTpCount || 3),
+      enabled: true,
+    };
+    setMultiTpConfigs(prev => [newItem, ...prev]);
+    setNewCustomTpText('');
+    setNewCustomTpTopic('');
+    setShowAddCustomTpModal(false);
+    showToast('Tujuan Pembelajaran tambahan berhasil dimasukkan ke daftar!', 'success');
+  };
+
+  const handleRemoveCustomTp = (id: string) => {
+    setMultiTpConfigs(prev => prev.filter(it => it.id !== id));
+    showToast('TP berhasil dihapus dari daftar pilihan.', 'info');
+  };
 
   // Navigate to Curriculum & TP Settings
   const handleNavigateToTpSettings = () => {
@@ -231,23 +385,28 @@ export const QuestionGeneratorView: React.FC = () => {
     else if (g === 5 || g === 6) setFase('Fase C');
   }, [grade]);
 
-  // Handle Preset TP Selection
+  // Handle Preset TP Selection for Single TP mode
   const handleSelectPresetTp = (selectedTopic: string, selectedTp: string) => {
     setTopic(selectedTopic);
     setTp(selectedTp);
     showToast(`TP & Topik '${selectedTopic}' berhasil diterapkan!`, 'info');
   };
 
-  // Main Generator Function
+  // Main Generator Function (Handles both Seluruh TP Gabungan and Single TP)
   const handleGenerateQuestions = async () => {
-    if (!tp.trim()) {
+    const effectiveSubject = subject === 'Lainnya' ? customSubject.trim() || 'Mata Pelajaran Umum' : subject;
+
+    if (examMode === 'single_tp' && !tp.trim()) {
       showToast('Mohon masukkan Tujuan Pembelajaran (TP) terlebih dahulu!', 'error');
       return;
     }
 
-    const effectiveSubject = subject === 'Lainnya' ? customSubject.trim() || 'Mata Pelajaran Umum' : subject;
+    if (examMode === 'multi_tp' && (activeMultiTps.length === 0 || totalMultiQuestions === 0)) {
+      showToast('Pilih minimal 1 Tujuan Pembelajaran (TP) dengan alokasi butir soal > 0!', 'error');
+      return;
+    }
+
     setIsGenerating(true);
-    setGenerationStepText('Menghubungkan ke Gemini AI & menganalisis Tujuan Pembelajaran...');
 
     const baseKop = userProfile.kopConfig || {
       showKop: true,
@@ -274,81 +433,184 @@ export const QuestionGeneratorView: React.FC = () => {
 
     const kopConfigToUse: KopConfig = {
       ...baseKop,
-      showSignature: false, // Menghilangkan tampilan tanda tangan dan nama di lembar soal hasil generate
+      showSignature: false,
     };
 
     try {
-      // 1. Attempt AI generation via server endpoint
-      setGenerationStepText('Merumuskan stimulus cerita, butir pertanyaan, dan kunci jawaban bervariasi...');
-      const response = await fetch('/api/generate-questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      let finalQuestions: QuestionItem[] = [];
+
+      if (examMode === 'multi_tp') {
+        setGenerationStepText(
+          `Mempersiapkan pembuatan soal gabungan dari ${activeMultiTps.length} Tujuan Pembelajaran (${totalMultiQuestions} butir)...`
+        );
+
+        // 1. Attempt AI generation with multiTpItems
+        try {
+          const response = await fetch('/api/generate-questions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              subject: effectiveSubject,
+              grade,
+              fase,
+              tp: activeMultiTps.map(it => it.tp).join(' | '),
+              topic: activeMultiTps.map(it => it.topic).filter((v, i, a) => a.indexOf(v) === i).join(', '),
+              multiTpItems: activeMultiTps.map(it => ({
+                tp: it.tp,
+                topic: it.topic,
+                count: it.count,
+              })),
+              questionCount: totalMultiQuestions,
+              questionType,
+              cognitiveLevel,
+              questionStyle,
+              semester,
+              academicYear,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.hasAi && Array.isArray(data.questions) && data.questions.length > 0) {
+              finalQuestions = data.questions;
+            }
+          }
+        } catch {
+          // AI failed, fallback to local engine
+        }
+
+        // 2. Fallback to deterministic curriculum generator per TP
+        if (!finalQuestions || finalQuestions.length === 0) {
+          setGenerationStepText('Menyusun butir soal via mesin kurikulum terstandar untuk setiap Tujuan Pembelajaran...');
+          const combinedList: QuestionItem[] = [];
+          activeMultiTps.forEach(item => {
+            const subList = generateOfflineQuestions(
+              effectiveSubject,
+              grade,
+              item.tp,
+              item.topic,
+              questionType,
+              item.count,
+              cognitiveLevel
+            );
+            subList.forEach(q => {
+              combinedList.push({
+                ...q,
+                tpRef: item.tp,
+                topicRef: item.topic,
+              });
+            });
+          });
+          finalQuestions = combinedList;
+        }
+
+        // 3. Consecutive numbering 1 to total questions
+        finalQuestions = finalQuestions.map((q, idx) => ({
+          ...q,
+          number: idx + 1,
+        }));
+
+        const uniqueTopics = Array.from(new Set(activeMultiTps.map(it => it.topic))).join(', ');
+        const examTitle = `Asesmen Sumatif Komprehensif ${effectiveSubject} Kelas ${grade} (Seluruh TP)`;
+
+        const newExam: GeneratedExam = {
+          id: `exam-multi-${Date.now()}`,
+          title: examTitle,
           subject: effectiveSubject,
           grade,
           fase,
-          tp,
-          topic,
-          questionCount,
-          questionType,
-          cognitiveLevel,
-          questionStyle,
           semester,
           academicYear,
-        }),
-      });
-
-      let finalQuestions: QuestionItem[] = [];
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.hasAi && Array.isArray(data.questions) && data.questions.length > 0) {
-          finalQuestions = data.questions;
-        }
-      }
-
-      // 2. Fallback to local deterministic curriculum engine if AI did not return full results
-      if (!finalQuestions || finalQuestions.length === 0) {
-        setGenerationStepText('Menyusun butir soal via mesin kurikulum terstandar...');
-        finalQuestions = generateOfflineQuestions(
-          effectiveSubject,
-          grade,
-          tp,
-          topic,
+          tp: `Asesmen Gabungan ${activeMultiTps.length} Tujuan Pembelajaran (TP Kurikulum Merdeka)`,
+          topic: `Seluruh Lingkup Materi (${uniqueTopics})`,
+          isMultiTp: true,
+          multiTpConfigs: activeMultiTps,
           questionType,
-          questionCount,
-          cognitiveLevel
+          questionCount: finalQuestions.length,
+          cognitiveLevel,
+          questionStyle,
+          durationMinutes,
+          kopConfig: kopConfigToUse,
+          questions: finalQuestions,
+          createdAt: new Date().toISOString(),
+        };
+
+        setGeneratedExam(newExam);
+        showToast(
+          `Berhasil menggabungkan ${finalQuestions.length} butir soal dari ${activeMultiTps.length} TP menjadi 1 hasil kerja terpadu!`,
+          'success'
         );
+      } else {
+        // Single TP Mode
+        setGenerationStepText('Menghubungkan ke Gemini AI & menganalisis Tujuan Pembelajaran...');
+        const response = await fetch('/api/generate-questions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subject: effectiveSubject,
+            grade,
+            fase,
+            tp,
+            topic,
+            questionCount,
+            questionType,
+            cognitiveLevel,
+            questionStyle,
+            semester,
+            academicYear,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.hasAi && Array.isArray(data.questions) && data.questions.length > 0) {
+            finalQuestions = data.questions;
+          }
+        }
+
+        if (!finalQuestions || finalQuestions.length === 0) {
+          setGenerationStepText('Menyusun butir soal via mesin kurikulum terstandar...');
+          finalQuestions = generateOfflineQuestions(
+            effectiveSubject,
+            grade,
+            tp,
+            topic,
+            questionType,
+            questionCount,
+            cognitiveLevel
+          );
+        }
+
+        finalQuestions = finalQuestions.slice(0, questionCount).map((q, i) => ({
+          ...q,
+          number: i + 1,
+        }));
+
+        const newExam: GeneratedExam = {
+          id: `exam-${Date.now()}`,
+          title: `Asesmen Sumatif ${effectiveSubject} Kelas ${grade}`,
+          subject: effectiveSubject,
+          grade,
+          fase,
+          semester,
+          academicYear,
+          tp,
+          topic: topic || tp,
+          isMultiTp: false,
+          questionType,
+          questionCount: finalQuestions.length,
+          cognitiveLevel,
+          questionStyle,
+          durationMinutes,
+          kopConfig: kopConfigToUse,
+          questions: finalQuestions,
+          createdAt: new Date().toISOString(),
+        };
+
+        setGeneratedExam(newExam);
+        showToast(`Berhasil menyusun ${finalQuestions.length} butir soal dengan variasi pola & kunci jawaban!`, 'success');
       }
 
-      // Ensure exact count and consecutive numbering
-      finalQuestions = finalQuestions.slice(0, questionCount).map((q, i) => ({
-        ...q,
-        number: i + 1,
-      }));
-
-      const newExam: GeneratedExam = {
-        id: `exam-${Date.now()}`,
-        title: `Asesmen Sumatif ${effectiveSubject} Kelas ${grade}`,
-        subject: effectiveSubject,
-        grade,
-        fase,
-        semester,
-        academicYear,
-        tp,
-        topic: topic || tp,
-        questionType,
-        questionCount: finalQuestions.length,
-        cognitiveLevel,
-        questionStyle,
-        durationMinutes,
-        kopConfig: kopConfigToUse,
-        questions: finalQuestions,
-        createdAt: new Date().toISOString(),
-      };
-
-      setGeneratedExam(newExam);
-      showToast(`Berhasil menyusun ${finalQuestions.length} butir soal dengan variasi pola & kunci jawaban!`, 'success');
       setTimeout(() => {
         const target = document.getElementById('exam-preview-panel');
         if (target) {
@@ -356,43 +618,8 @@ export const QuestionGeneratorView: React.FC = () => {
         }
       }, 120);
     } catch (err) {
-      // Local fallback on any network failure
-      const finalQuestions = generateOfflineQuestions(
-        effectiveSubject,
-        grade,
-        tp,
-        topic,
-        questionType,
-        questionCount,
-        cognitiveLevel
-      );
-      const newExam: GeneratedExam = {
-        id: `exam-${Date.now()}`,
-        title: `Asesmen Sumatif ${effectiveSubject} Kelas ${grade}`,
-        subject: effectiveSubject,
-        grade,
-        fase,
-        semester,
-        academicYear,
-        tp,
-        topic: topic || tp,
-        questionType,
-        questionCount: finalQuestions.length,
-        cognitiveLevel,
-        questionStyle,
-        durationMinutes,
-        kopConfig: kopConfigToUse,
-        questions: finalQuestions,
-        createdAt: new Date().toISOString(),
-      };
-      setGeneratedExam(newExam);
-      showToast(`Berhasil menyusun ${finalQuestions.length} butir soal bervariasi!`, 'success');
-      setTimeout(() => {
-        const target = document.getElementById('exam-preview-panel');
-        if (target) {
-          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }, 120);
+      console.error(err);
+      showToast('Gagal memproses soal, silakan coba kembali.', 'error');
     } finally {
       setIsGenerating(false);
       setGenerationStepText('');
@@ -537,6 +764,22 @@ export const QuestionGeneratorView: React.FC = () => {
     showToast('Perubahan butir soal berhasil disimpan!', 'success');
   };
 
+  // Google Sheets Export confirmation and execute
+  const handleConfirmExportToSheets = async () => {
+    if (!generatedExam) return;
+    try {
+      setIsExportingSheets(true);
+      const res = await exportExamToSheets(generatedExam);
+      setExportedSheetsUrl(res.spreadsheetUrl);
+      setShowSheetsConfirmModal(false);
+      showToast('Naskah soal, kisi-kisi, dan format nilai berhasil diekspor ke Google Sheets!', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Gagal mengekspor ke Google Sheets', 'error');
+    } finally {
+      setIsExportingSheets(false);
+    }
+  };
+
   const activeTpPresets = RECOMMENDED_TPS[subject] || [];
 
   return (
@@ -544,7 +787,7 @@ export const QuestionGeneratorView: React.FC = () => {
       {/* HEADER BANNER */}
       <div
         id="question-generator-banner"
-        className="bg-gradient-to-r from-[#00529C] via-[#0066C0] to-[#FF7300] text-white p-6 sm:p-8 rounded-3xl shadow-lg relative overflow-hidden"
+        className="bg-gradient-to-r from-[#00529C] via-[#0066C0] to-[#FF7300] text-white p-6 sm:p-8 rounded-3xl shadow-lg relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-6"
       >
         <div className="relative z-10 max-w-3xl space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-white text-xs font-bold tracking-wide uppercase">
@@ -557,6 +800,18 @@ export const QuestionGeneratorView: React.FC = () => {
           <p className="text-xs sm:text-sm text-white/90 leading-relaxed">
             Hasilkan instrumen asesmen bermakna sesuai <strong>Tujuan Pembelajaran (TP)</strong> dan <strong>Mata Pelajaran</strong> Anda. Lengkap dengan KOP Surat resmi sekolah, stimulus kontekstual, kunci jawaban terperinci, rubrik penskoran, serta kisi-kisi penulisan soal siap cetak A4.
           </p>
+        </div>
+
+        <div className="relative z-10 shrink-0 flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setIsSheetsModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md backdrop-blur-md transition active:scale-95"
+            title="Kelola Integrasi Google Sheets & Drive"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Google Sheets & Drive</span>
+          </button>
         </div>
       </div>
 
@@ -644,150 +899,389 @@ export const QuestionGeneratorView: React.FC = () => {
                 </div>
               </div>
 
-              {/* 2. Tujuan Pembelajaran (TP) */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Tujuan Pembelajaran (TP) <span className="text-rose-500">*</span>
-                  </label>
-                  <span className="text-[10px] text-slate-400 font-mono">Bisa diedit</span>
+              {/* MODE SELECTION: SELURUH TP VS SATU TP */}
+              <div className="bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700">
+                <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 px-1 pb-1 flex items-center justify-between">
+                  <span>Cakupan Asesmen:</span>
+                  <span className="text-[10px] font-mono text-[#00529C] dark:text-blue-400 font-bold">Kurikulum Merdeka</span>
                 </div>
-                <textarea
-                  rows={3}
-                  value={tp}
-                  onChange={e => setTp(e.target.value)}
-                  placeholder="Masukkan Tujuan Pembelajaran (TP) yang ingin diukur..."
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs leading-relaxed text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-[#00529C] focus:outline-hidden"
-                />
-
-                {/* Lingkup Materi */}
-                <div className="mt-2">
-                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                    Lingkup Materi / Topik Pokok
-                  </label>
-                  <input
-                    type="text"
-                    value={topic}
-                    onChange={e => setTopic(e.target.value)}
-                    placeholder="Contoh: Fotosintesis & Bagian Tumbuhan"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
-                  />
-                </div>
-
-                {/* Rekomendasi TP Cepat */}
-                <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <button
-                      type="button"
-                      id="btn-nav-tp-settings"
-                      onClick={handleNavigateToTpSettings}
-                      title="Klik untuk membuka Pengaturan & Panduan Tujuan Pembelajaran (TP) resmi Kurikulum Merdeka"
-                      className="group text-[11px] font-bold text-[#00529C] dark:text-blue-400 hover:text-[#FF7300] dark:hover:text-amber-400 flex items-center gap-1.5 transition text-left cursor-pointer p-0.5 -ml-0.5 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-[#00529C]/30"
-                    >
-                      <BookOpen className="w-3.5 h-3.5 group-hover:scale-110 transition-transform text-[#00529C] dark:text-blue-400 group-hover:text-[#FF7300]" />
-                      <span className="group-hover:underline underline-offset-2">
-                        Pilihan TP Standar Kurikulum ({subject}):
-                      </span>
-                      <ExternalLink className="w-3 h-3 opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleNavigateToTpSettings}
-                      className="text-[10px] font-bold text-slate-500 hover:text-[#00529C] dark:text-slate-400 dark:hover:text-blue-300 flex items-center gap-0.5 px-2 py-0.5 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/40 transition shrink-0 cursor-pointer"
-                    >
-                      <span>Pengaturan TP</span>
-                      <ChevronRight className="w-3 h-3" />
-                    </button>
-                  </div>
-
-                  {activeTpPresets.length > 0 ? (
-                    <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-                      {activeTpPresets.map((preset, idx) => (
-                        <div key={idx} className="bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl text-xs space-y-1">
-                          <div className="font-bold text-slate-700 dark:text-slate-300 text-[11px]">
-                            {preset.topic}
-                          </div>
-                          {preset.tpList.map((item, tIdx) => (
-                            <button
-                              key={tIdx}
-                              type="button"
-                              onClick={() => handleSelectPresetTp(preset.topic, item)}
-                              className="text-left w-full p-1 rounded-md text-[10.5px] text-slate-600 dark:text-slate-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 hover:text-[#00529C] dark:hover:text-blue-300 transition flex items-start gap-1"
-                            >
-                              <span className="text-[#00529C] font-bold shrink-0">•</span>
-                              <span className="line-clamp-2">{item}</span>
-                            </button>
-                          ))}
-                        </div>
-                      ))}
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    id="mode-multi-tp-btn"
+                    onClick={() => setExamMode('multi_tp')}
+                    className={`py-2.5 px-3 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
+                      examMode === 'multi_tp'
+                        ? 'bg-[#00529C] text-white shadow-xs'
+                        : 'bg-white/70 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <Layers className="w-4 h-4 shrink-0 text-amber-300" />
+                    <div className="text-left min-w-0">
+                      <div className="leading-tight font-black truncate">Seluruh TP (Gabung 1 Naskah)</div>
+                      <div className="text-[9.5px] font-normal opacity-90 hidden sm:block truncate">Sumatif / STS / SAS Terpadu</div>
                     </div>
-                  ) : (
-                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-dashed border-slate-200 dark:border-slate-700 text-center">
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        Belum ada preset lokal untuk mata pelajaran {subject}.
-                      </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    id="mode-single-tp-btn"
+                    onClick={() => setExamMode('single_tp')}
+                    className={`py-2.5 px-3 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
+                      examMode === 'single_tp'
+                        ? 'bg-[#00529C] text-white shadow-xs'
+                        : 'bg-white/70 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <FileText className="w-4 h-4 shrink-0 text-sky-300" />
+                    <div className="text-left min-w-0">
+                      <div className="leading-tight font-black truncate">Satu TP Saja</div>
+                      <div className="text-[9.5px] font-normal opacity-90 hidden sm:block truncate">Formatif / Ulangan Harian</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* KONTEN BERDASARKAN MODE */}
+              {examMode === 'multi_tp' ? (
+                /* MODE: SELURUH TP DENGAN ALOKASI BUTIR SOAL PER TP */
+                <div className="space-y-3">
+                  {/* Summary Header & Batch Operations Bar */}
+                  <div className="p-3 rounded-2xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-200 dark:border-blue-900/60 space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-[#00529C] text-white flex items-center justify-center font-bold text-xs">
+                          {activeMultiTps.length}
+                        </div>
+                        <div>
+                          <span className="text-xs font-black text-[#00529C] dark:text-blue-300">
+                            {activeMultiTps.length} TP Terpilih
+                          </span>
+                          <span className="text-slate-400 mx-1.5">•</span>
+                          <span className="text-xs font-black text-[#FF7300]">
+                            Total {totalMultiQuestions} Butir Soal Gabungan
+                          </span>
+                        </div>
+                      </div>
+
                       <button
                         type="button"
-                        onClick={handleNavigateToTpSettings}
-                        className="mt-1.5 inline-flex items-center gap-1 text-xs font-bold text-[#00529C] dark:text-blue-400 hover:underline cursor-pointer"
+                        id="btn-add-custom-tp"
+                        onClick={() => setShowAddCustomTpModal(true)}
+                        className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 text-[#00529C] dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-bold hover:bg-blue-50 flex items-center gap-1 transition shadow-2xs cursor-pointer"
                       >
-                        <BookOpen className="w-3 h-3" />
-                        <span>Buka Panduan & Pengaturan TP Lengkap ↗</span>
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Tambah TP Kustom</span>
                       </button>
                     </div>
+
+                    {/* Batch Actions Bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-blue-100 dark:border-blue-900/40 text-[11px]">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleAllTps(true)}
+                          className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-semibold hover:text-[#00529C] flex items-center gap-1 cursor-pointer"
+                        >
+                          <CheckCheck className="w-3 h-3 text-emerald-600" />
+                          <span>Pilih Semua</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleAllTps(false)}
+                          className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-semibold hover:text-rose-600 cursor-pointer"
+                        >
+                          <span>Kosongkan</span>
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <span className="text-slate-500 dark:text-slate-400 text-[10.5px]">Set Seragam:</span>
+                        {[1, 2, 3, 5].map(cnt => (
+                          <button
+                            key={cnt}
+                            type="button"
+                            onClick={() => handleSetUniformCount(cnt)}
+                            className="px-1.5 py-0.5 rounded-md bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-bold text-[10.5px] hover:border-[#FF7300] hover:text-[#FF7300] cursor-pointer"
+                          >
+                            {cnt} Soal
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Filter / Search within TP */}
+                  {multiTpConfigs.length > 3 && (
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Cari topik atau kata kunci TP..."
+                        value={filterTpSearch}
+                        onChange={e => setFilterTpSearch(e.target.value)}
+                        className="w-full pl-8 pr-7 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-[#00529C]"
+                      />
+                      {filterTpSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setFilterTpSearch('')}
+                          className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   )}
-                </div>
-              </div>
 
-              {/* 3. Jumlah Soal */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Jumlah Soal yang Digenerate <span className="text-rose-500">*</span>
-                  </label>
-                  <span className="px-2.5 py-0.5 rounded-full bg-orange-100 dark:bg-orange-950 text-[#FF7300] font-black text-xs font-mono">
-                    {questionCount} Butir Soal
-                  </span>
-                </div>
+                  {/* TP Cards List with Checkboxes and Count Steppers */}
+                  <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                    {filteredMultiTps.map((item, idx) => (
+                      <div
+                        key={item.id || idx}
+                        className={`p-3 rounded-xl border transition-all ${
+                          item.enabled
+                            ? 'bg-white dark:bg-slate-800/90 border-blue-200 dark:border-blue-800/60 shadow-2xs'
+                            : 'bg-slate-50/60 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 opacity-60'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <input
+                            type="checkbox"
+                            checked={item.enabled}
+                            onChange={() => handleToggleTpItem(item.id)}
+                            className="mt-1 w-4 h-4 rounded text-[#00529C] focus:ring-[#00529C] cursor-pointer"
+                          />
 
-                {/* Quick selection pills */}
-                <div className="grid grid-cols-6 gap-1.5 mb-2">
-                  {[5, 10, 15, 20, 25, 30].map(cnt => (
-                    <button
-                      key={cnt}
-                      type="button"
-                      onClick={() => setQuestionCount(cnt)}
-                      className={`py-1.5 text-xs font-bold rounded-xl transition ${
-                        questionCount === cnt
-                          ? 'bg-[#FF7300] text-white shadow-xs'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                      }`}
-                    >
-                      {cnt}
-                    </button>
-                  ))}
-                </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
+                              <span className="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/70 text-[#00529C] dark:text-blue-300 font-black text-[10px] tracking-wide uppercase">
+                                {item.topic}
+                              </span>
 
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={1}
-                    max={40}
-                    value={questionCount}
-                    onChange={e => setQuestionCount(Number(e.target.value))}
-                    className="flex-1 accent-[#FF7300]"
-                  />
-                  <input
-                    type="number"
-                    min={1}
-                    max={40}
-                    value={questionCount}
-                    onChange={e => setQuestionCount(Math.max(1, Math.min(40, Number(e.target.value) || 1)))}
-                    className="w-16 px-2 py-1 text-center font-bold text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                  />
+                              {item.id.startsWith('custom-tp-') && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveCustomTp(item.id)}
+                                  className="text-slate-400 hover:text-rose-500 p-0.5 transition cursor-pointer"
+                                  title="Hapus TP Kustom"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+
+                            <p className="text-xs text-slate-800 dark:text-slate-200 leading-relaxed font-medium">
+                              {item.tp}
+                            </p>
+
+                            {/* Question Count Stepper for This TP */}
+                            {item.enabled && (
+                              <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/60 flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                                  Alokasi Jumlah Soal TP ini:
+                                </span>
+
+                                <div className="flex items-center gap-2">
+                                  <div className="flex items-center border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-800">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateTpCount(item.id, (item.count || 1) - 1)}
+                                      className="px-2 py-1 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold cursor-pointer"
+                                    >
+                                      <Minus className="w-3 h-3" />
+                                    </button>
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={25}
+                                      value={item.count}
+                                      onChange={e => handleUpdateTpCount(item.id, Number(e.target.value) || 1)}
+                                      className="w-10 text-center text-xs font-black text-[#FF7300] bg-transparent border-x border-slate-200 dark:border-slate-700 py-1"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateTpCount(item.id, (item.count || 1) + 1)}
+                                      className="px-2 py-1 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 text-xs font-bold cursor-pointer"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </button>
+                                  </div>
+
+                                  {/* Quick Chips */}
+                                  <div className="flex items-center gap-1">
+                                    {[1, 2, 3, 5].map(cnt => (
+                                      <button
+                                        key={cnt}
+                                        type="button"
+                                        onClick={() => handleUpdateTpCount(item.id, cnt)}
+                                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
+                                          item.count === cnt
+                                            ? 'bg-[#FF7300] text-white'
+                                            : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                                        }`}
+                                      >
+                                        {cnt}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                /* MODE: SATU TP SAJA DENGAN SLIDER JUMLAH SOAL */
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Tujuan Pembelajaran (TP) <span className="text-rose-500">*</span>
+                      </label>
+                      <span className="text-[10px] text-slate-400 font-mono">Bisa diedit</span>
+                    </div>
+                    <textarea
+                      rows={3}
+                      value={tp}
+                      onChange={e => setTp(e.target.value)}
+                      placeholder="Masukkan Tujuan Pembelajaran (TP) yang ingin diukur..."
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs leading-relaxed text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-[#00529C] focus:outline-hidden"
+                    />
+
+                    {/* Lingkup Materi */}
+                    <div className="mt-2">
+                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                        Lingkup Materi / Topik Pokok
+                      </label>
+                      <input
+                        type="text"
+                        value={topic}
+                        onChange={e => setTopic(e.target.value)}
+                        placeholder="Contoh: Fotosintesis & Bagian Tumbuhan"
+                        className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+                      />
+                    </div>
+
+                    {/* Rekomendasi TP Cepat */}
+                    <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <button
+                          type="button"
+                          id="btn-nav-tp-settings"
+                          onClick={handleNavigateToTpSettings}
+                          title="Klik untuk membuka Pengaturan & Panduan Tujuan Pembelajaran (TP) resmi Kurikulum Merdeka"
+                          className="group text-[11px] font-bold text-[#00529C] dark:text-blue-400 hover:text-[#FF7300] dark:hover:text-amber-400 flex items-center gap-1.5 transition text-left cursor-pointer p-0.5 -ml-0.5 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-[#00529C]/30"
+                        >
+                          <BookOpen className="w-3.5 h-3.5 group-hover:scale-110 transition-transform text-[#00529C] dark:text-blue-400 group-hover:text-[#FF7300]" />
+                          <span className="group-hover:underline underline-offset-2">
+                            Pilihan TP Standar Kurikulum ({subject}):
+                          </span>
+                          <ExternalLink className="w-3 h-3 opacity-70 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleNavigateToTpSettings}
+                          className="text-[10px] font-bold text-slate-500 hover:text-[#00529C] dark:text-slate-400 dark:hover:text-blue-300 flex items-center gap-0.5 px-2 py-0.5 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/40 transition shrink-0 cursor-pointer"
+                        >
+                          <span>Pengaturan TP</span>
+                          <ChevronRight className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      {activeTpPresets.length > 0 ? (
+                        <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                          {activeTpPresets.map((preset, idx) => (
+                            <div key={idx} className="bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl text-xs space-y-1">
+                              <div className="font-bold text-slate-700 dark:text-slate-300 text-[11px]">
+                                {preset.topic}
+                              </div>
+                              {preset.tpList.map((item, tIdx) => (
+                                <button
+                                  key={tIdx}
+                                  type="button"
+                                  onClick={() => handleSelectPresetTp(preset.topic, item)}
+                                  className="text-left w-full p-1 rounded-md text-[10.5px] text-slate-600 dark:text-slate-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 hover:text-[#00529C] dark:hover:text-blue-300 transition flex items-start gap-1"
+                                >
+                                  <span className="text-[#00529C] font-bold shrink-0">•</span>
+                                  <span className="line-clamp-2">{item}</span>
+                                </button>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-dashed border-slate-200 dark:border-slate-700 text-center">
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Belum ada preset lokal untuk mata pelajaran {subject}.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={handleNavigateToTpSettings}
+                            className="mt-1.5 inline-flex items-center gap-1 text-xs font-bold text-[#00529C] dark:text-blue-400 hover:underline cursor-pointer"
+                          >
+                            <BookOpen className="w-3 h-3" />
+                            <span>Buka Panduan & Pengaturan TP Lengkap ↗</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Jumlah Soal untuk Single TP */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Jumlah Soal yang Digenerate <span className="text-rose-500">*</span>
+                      </label>
+                      <span className="px-2.5 py-0.5 rounded-full bg-orange-100 dark:bg-orange-950 text-[#FF7300] font-black text-xs font-mono">
+                        {questionCount} Butir Soal
+                      </span>
+                    </div>
+
+                    {/* Quick selection pills */}
+                    <div className="grid grid-cols-6 gap-1.5 mb-2">
+                      {[5, 10, 15, 20, 25, 30].map(cnt => (
+                        <button
+                          key={cnt}
+                          type="button"
+                          onClick={() => setQuestionCount(cnt)}
+                          className={`py-1.5 text-xs font-bold rounded-xl transition cursor-pointer ${
+                            questionCount === cnt
+                              ? 'bg-[#FF7300] text-white shadow-xs'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                          }`}
+                        >
+                          {cnt}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min={1}
+                        max={40}
+                        value={questionCount}
+                        onChange={e => setQuestionCount(Number(e.target.value))}
+                        className="flex-1 accent-[#FF7300]"
+                      />
+                      <input
+                        type="number"
+                        min={1}
+                        max={40}
+                        value={questionCount}
+                        onChange={e => setQuestionCount(Math.max(1, Math.min(40, Number(e.target.value) || 1)))}
+                        className="w-16 px-2 py-1 text-center font-bold text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* 4. Jenis Soal */}
               <div>
@@ -836,10 +1330,12 @@ export const QuestionGeneratorView: React.FC = () => {
                     onChange={e => setCognitiveLevel(e.target.value)}
                     className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-100"
                   >
-                    <option value="HOTS (C4-C6)">HOTS (C4-C6 Nalar Kritis)</option>
-                    <option value="Proporsional (Campuran)">Proporsional (LOTS+MOTS+HOTS)</option>
-                    <option value="MOTS (C3)">MOTS (C3 Penerapan)</option>
-                    <option value="LOTS (C1-C2)">LOTS (C1-C2 Pemahaman)</option>
+                    <option value="Paling Mudah (C1 Mengingat)">🟢 Paling Mudah: C1 Mengingat (Fakta, Definisi & Hafalan)</option>
+                    <option value="Mudah (C2 Memahami)">🟡 Mudah: C2 Memahami (Konsep, Ciri & Contoh Dasar)</option>
+                    <option value="LOTS (C1-C2)">📋 LOTS: C1-C2 (Mengingat & Pemahaman)</option>
+                    <option value="MOTS (C3)">🔵 MOTS: C3 (Penerapan & Aplikasi)</option>
+                    <option value="HOTS (C4-C6)">🟣 HOTS: C4-C6 (Nalar Kritis & Analisis)</option>
+                    <option value="Proporsional (Campuran)">⚪ Proporsional (Campuran Seimbang C1 s.d C5)</option>
                   </select>
                 </div>
 
@@ -902,18 +1398,26 @@ export const QuestionGeneratorView: React.FC = () => {
               id="btn-generate-questions"
               type="button"
               onClick={handleGenerateQuestions}
-              disabled={isGenerating}
-              className="w-full py-3.5 px-4 rounded-xl font-black text-sm text-white bg-gradient-to-r from-[#FF7300] to-[#E65100] hover:from-[#E65100] hover:to-[#D84315] shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isGenerating || (examMode === 'multi_tp' && (activeMultiTps.length === 0 || totalMultiQuestions === 0))}
+              className="w-full py-3.5 px-4 rounded-xl font-black text-sm text-white bg-gradient-to-r from-[#FF7300] to-[#E65100] hover:from-[#E65100] hover:to-[#D84315] shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {isGenerating ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                  <span>Menyusun {questionCount} Butir Soal...</span>
+                  <span>
+                    {examMode === 'multi_tp'
+                      ? `Menyusun ${totalMultiQuestions} Butir Soal Seluruh TP...`
+                      : `Menyusun ${questionCount} Butir Soal...`}
+                  </span>
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4 text-amber-300" />
-                  <span>Generate {questionCount} Soal AI Sekarang</span>
+                  <span>
+                    {examMode === 'multi_tp'
+                      ? `Buat Soal Gabungan Seluruh TP (${totalMultiQuestions} Soal)`
+                      : `Generate ${questionCount} Soal AI Sekarang`}
+                  </span>
                 </>
               )}
             </button>
@@ -1049,8 +1553,70 @@ export const QuestionGeneratorView: React.FC = () => {
                     <CheckSquare className="w-3.5 h-3.5" />
                     <span className="hidden md:inline">Simpan</span>
                   </button>
+
+                  {/* GOOGLE SHEETS EXPORT BUTTON */}
+                  <button
+                    id="btn-export-google-sheets"
+                    onClick={() => setShowSheetsConfirmModal(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition cursor-pointer"
+                    title="Ekspor ke Google Sheets (Daftar Soal, Kisi-Kisi, dan Format Nilai)"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Google Sheets</span>
+                  </button>
                 </div>
               </div>
+
+              {/* MULTI-TP SUMMARY BANNER */}
+              {generatedExam.isMultiTp && (
+                <div className="px-4 py-2.5 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/60 dark:to-indigo-950/60 border-b border-blue-200 dark:border-blue-900/60 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-full bg-[#00529C] text-white font-black text-[10.5px]">
+                      Gabungan Seluruh TP
+                    </span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200">
+                      {generatedExam.multiTpBreakdown?.length || 'Semua'} Tujuan Pembelajaran
+                    </span>
+                    <span className="text-slate-400">•</span>
+                    <span className="font-bold text-[#FF7300]">
+                      {generatedExam.questions.length} Butir Soal Terpadu
+                    </span>
+                  </div>
+
+                  {generatedExam.multiTpBreakdown && generatedExam.multiTpBreakdown.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {generatedExam.multiTpBreakdown.map((b, i) => (
+                        <span
+                          key={i}
+                          className="px-2 py-0.5 rounded-md bg-white/80 dark:bg-slate-800 border border-blue-100 dark:border-blue-800 text-[10.5px] font-semibold text-slate-700 dark:text-slate-300"
+                          title={b.tp}
+                        >
+                          {b.topic}: <strong className="text-[#00529C] dark:text-blue-400">{b.count} Soal</strong>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SUCCESS NOTIFICATION FOR SPREADSHEET */}
+              {exportedSheetsUrl && (
+                <div className="px-4 py-2.5 bg-emerald-50 dark:bg-emerald-950/40 border-b border-emerald-200 dark:border-emerald-800 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-200 font-semibold">
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Spreadsheet asesmen berhasil dibuat di Google Drive!</span>
+                  </div>
+                  <a
+                    href={exportedSheetsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition"
+                  >
+                    <span>Buka di Google Sheets</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
 
               {/* PRINTABLE PREVIEW CONTAINER */}
               <div
@@ -1148,7 +1714,19 @@ export const QuestionGeneratorView: React.FC = () => {
                             )}
                             <span>{q.type}</span>
                             <span>•</span>
-                            <span>Level {q.cognitiveLevel}</span>
+                            <span
+                              className={`px-1.5 py-0.5 rounded-md font-bold text-[9px] border ${
+                                q.cognitiveLevel === 'C1'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                                  : q.cognitiveLevel === 'C2'
+                                  ? 'bg-teal-50 text-teal-700 border-teal-300 dark:bg-teal-950/60 dark:text-teal-300 dark:border-teal-800'
+                                  : q.cognitiveLevel === 'C3'
+                                  ? 'bg-blue-50 text-blue-700 border-blue-300 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800'
+                                  : 'bg-purple-50 text-purple-700 border-purple-300 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800'
+                              }`}
+                            >
+                              Level {q.cognitiveLevel} {q.cognitiveLevel === 'C1' ? '(Paling Mudah)' : q.cognitiveLevel === 'C2' ? '(Mudah)' : q.cognitiveLevel === 'C3' ? '(Sedang)' : '(Tinggi)'}
+                            </span>
                             <span>•</span>
                             <span className="text-emerald-600 dark:text-emerald-400 font-medium">
                               Kunci: {q.correctAnswer}
@@ -1284,6 +1862,45 @@ export const QuestionGeneratorView: React.FC = () => {
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Level Kognitif (Bloom)
+                  </label>
+                  <select
+                    value={editingQuestion.cognitiveLevel}
+                    onChange={e =>
+                      setEditingQuestion({
+                        ...editingQuestion,
+                        cognitiveLevel: e.target.value as QuestionItem['cognitiveLevel'],
+                      })
+                    }
+                    className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-100"
+                  >
+                    <option value="C1">🟢 C1 - Mengingat (Paling Mudah)</option>
+                    <option value="C2">🟡 C2 - Memahami (Mudah)</option>
+                    <option value="C3">🔵 C3 - Menerapkan (Sedang)</option>
+                    <option value="C4">🟣 C4 - Menganalisis (HOTS)</option>
+                    <option value="C5">🟣 C5 - Mengevaluasi (HOTS)</option>
+                    <option value="C6">🟣 C6 - Mencipta (HOTS)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Bobot Skor Soal
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={editingQuestion.score}
+                    onChange={e =>
+                      setEditingQuestion({ ...editingQuestion, score: Number(e.target.value) || 1 })
+                    }
+                    className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-100"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Pembahasan / Rubrik Penskoran
@@ -1313,6 +1930,181 @@ export const QuestionGeneratorView: React.FC = () => {
                 className="px-4 py-2 rounded-xl bg-[#00529C] text-xs font-bold text-white shadow-xs"
               >
                 Simpan Perubahan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EXPORT TO GOOGLE SHEETS CONFIRMATION MODAL */}
+      {showSheetsConfirmModal && generatedExam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center shadow-xs">
+                <FileSpreadsheet className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-900 dark:text-slate-100">
+                  Konfirmasi Ekspor ke Google Sheets
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Membuat spreadsheet baru di Google Drive Anda
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-2.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Judul Spreadsheet:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200 text-right truncate max-w-[240px]">
+                  [Asesmen SD] {generatedExam.subject} - Kelas {generatedExam.grade}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Jumlah Butir Soal:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">
+                  {generatedExam.questions.length} Butir Soal
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Struktur Lembar Kerja:</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                  3 Tab Otomatis
+                </span>
+              </div>
+              <ul className="list-disc pl-5 text-[11px] text-slate-600 dark:text-slate-300 space-y-0.5 pt-1">
+                <li>1. Butir Soal & Kunci (Soal, Opsi A-D, Kunci, Bobot)</li>
+                <li>2. Kisi-Kisi Asesmen (Pemetaan TP & Level Bloom)</li>
+                <li>3. Format Rekap Nilai Siswa (Rumus Nilai & KKTP)</li>
+              </ul>
+            </div>
+
+            {!isGoogleConnected && (
+              <p className="text-[11.5px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 p-3 rounded-xl border border-amber-200 dark:border-amber-900/60">
+                Catatan: Anda akan diminta memilih Akun Google untuk otorisasi penyimpanan file ke Google Drive Anda.
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                disabled={isExportingSheets}
+                onClick={() => setShowSheetsConfirmModal(false)}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isExportingSheets}
+                onClick={handleConfirmExportToSheets}
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md flex items-center gap-1.5 transition active:scale-95 disabled:opacity-60"
+              >
+                {isExportingSheets ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Menyimpan ke Google Drive...</span>
+                  </>
+                ) : (
+                  <>
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    <span>Buat Spreadsheet Sekarang</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TAMBAH TP KUSTOM */}
+      {showAddCustomTpModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-blue-100 dark:bg-blue-950 text-[#00529C] dark:text-blue-300 flex items-center justify-center font-bold">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-slate-100">
+                    Tambah TP (Tujuan Pembelajaran) Baru
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Masukkan rumusan TP khusus atau materi tambahan guru
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAddCustomTpModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Lingkup Materi / Topik Pokok <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Operasi Bilangan Pecahan, Ekosistem Sawah..."
+                  value={newCustomTpTopic}
+                  onChange={e => setNewCustomTpTopic(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Rumusan Tujuan Pembelajaran (TP) <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Contoh: Peserta didik mampu menganalisis hubungan antar makhluk hidup dalam jaring-jaring makanan..."
+                  value={newCustomTpText}
+                  onChange={e => setNewCustomTpText(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 leading-relaxed font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Alokasi Jumlah Butir Soal untuk TP Ini
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={newCustomTpCount}
+                    onChange={e => setNewCustomTpCount(Math.max(1, Math.min(20, Number(e.target.value) || 1)))}
+                    className="w-20 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-center font-black text-[#FF7300]"
+                  />
+                  <span className="text-slate-500 text-xs">butir soal</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowAddCustomTpModal(false)}
+                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleAddCustomTp}
+                className="px-4 py-2 rounded-xl bg-[#00529C] hover:bg-blue-800 text-white text-xs font-bold shadow-md flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Tambahkan ke Daftar TP</span>
               </button>
             </div>
           </div>

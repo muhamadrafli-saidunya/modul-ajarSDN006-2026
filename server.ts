@@ -189,6 +189,7 @@ app.post('/api/generate-questions', async (req, res) => {
       fase = 'Fase B',
       tp = '',
       topic = '',
+      multiTpItems,
       questionCount = 10,
       questionType = 'Pilihan Ganda',
       cognitiveLevel = 'HOTS (C4-C6)',
@@ -197,7 +198,25 @@ app.post('/api/generate-questions', async (req, res) => {
       academicYear = '2024/2025'
     } = req.body;
 
-    const count = Math.max(1, Math.min(40, Number(questionCount) || 10));
+    const isMultiTp = Array.isArray(multiTpItems) && multiTpItems.length > 0;
+    const calculatedTotal = isMultiTp
+      ? multiTpItems.reduce((acc: number, item: any) => acc + (Math.max(1, Number(item.count) || 1)), 0)
+      : Number(questionCount) || 10;
+    const count = Math.max(1, Math.min(50, calculatedTotal));
+
+    const expectedTpMap: { tp: string; topic: string }[] = [];
+    if (isMultiTp) {
+      multiTpItems.forEach((it: any) => {
+        const itCount = Math.max(1, Number(it.count) || 1);
+        for (let c = 0; c < itCount; c++) {
+          expectedTpMap.push({
+            tp: it.tp || tp,
+            topic: it.topic || topic || subject,
+          });
+        }
+      });
+    }
+
     const ai = getGemini();
 
     if (ai) {
@@ -223,18 +242,59 @@ PRINSIP UTAMA PENYUSUNAN SOAL:
 4. SESUAIKAN DENGAN TINGKAT PERKEMBANGAN KELAS ${grade} SD (${fase}):
    - Kalimat jelas, tidak ambigu, dan membangkitkan rasa ingin tahu anak.`;
 
+      let cognitiveGuidance = '';
+      if (cognitiveLevel.includes('C1') || cognitiveLevel.toLowerCase().includes('paling mudah')) {
+        cognitiveGuidance = `
+KHUSUS TARGET LEVEL KOGNITIF PALING MUDAH (C1 - MENGINGAT / REMEMBERING / FAKTA DASAR):
+- Susun butir-butir soal pada tingkat paling mudah yang ramah dan memotivasi peserta didik SD tingkat dasar.
+- Fokuskan pertanyaan pada recall ingatan langsung: menyebutkan fakta penting, nama alat/organ/tokoh/lambang, istilah sains/sosial, definisi konsep dasar, atau hafalan fakta esensial materi.
+- Kalimat soal dibuat lugas, jelas, tanpa memerlukan nalar kasus yang panjang atau analisis rumit.
+- Nilai field "cognitiveLevel" pada setiap butir soal WAJIB diisi "C1".`;
+      } else if (cognitiveLevel.includes('C2') && !cognitiveLevel.includes('C1-C2')) {
+        cognitiveGuidance = `
+KHUSUS TARGET LEVEL KOGNITIF MUDAH (C2 - MEMAHAMI / UNDERSTANDING):
+- Fokuskan butir soal pada pemahaman konsep: menjelaskan arti konsep, memberi contoh atau bukan contoh, mengidentifikasi ciri/sifat, atau menyimpulkan ide pokok sederhana.
+- Nilai field "cognitiveLevel" pada setiap butir soal WAJIB diisi "C2".`;
+      } else if (cognitiveLevel.includes('MOTS') || cognitiveLevel.includes('C3')) {
+        cognitiveGuidance = `
+KHUSUS TARGET LEVEL KOGNITIF SEDANG (C3 - MENERAPKAN / APPLYING):
+- Fokuskan butir soal pada aplikasi konsep atau aturan dalam situasi nyata/perhitungan sederhana.
+- Nilai field "cognitiveLevel" pada setiap butir soal WAJIB diisi "C3".`;
+      } else if (cognitiveLevel.includes('HOTS') || cognitiveLevel.includes('C4')) {
+        cognitiveGuidance = `
+KHUSUS TARGET LEVEL KOGNITIF TINGGI (HOTS - C4 s.d C6 ANALISIS, EVALUASI, KREASI):
+- Ujikan kemampuan nalar kritis anak: memecahkan masalah kontekstual, membaca data/tabel, menganalisis sebab-akibat, membandingkan argumen, atau memprediksi solusi.
+- Nilai field "cognitiveLevel" diisi "C4", "C5", atau "C6".`;
+      }
+
+      const tpSection = isMultiTp
+        ? `TUGAS KHUSUS: ASESMEN KOMPREHENSIF GABUNGAN SELURUH TP (TOTAL ${count} BUTIR SOAL):
+Instrumen evaluasi ini menggabungkan ${multiTpItems.length} Tujuan Pembelajaran (TP) sebagai berikut:
+${multiTpItems.map((it: any, i: number) => `
+[BAGIAN TP ${i + 1}] Target Alokasi: ${it.count} butir soal
+- Topik / Lingkup Materi: ${it.topic || subject}
+- Tujuan Pembelajaran (TP): ${it.tp}
+`).join('')}
+
+PETUNJUK GABUNGAN:
+- Buat butir-butir soal berkesinambungan nomor 1 sampai ${count}.
+- Pastikan setiap butir soal memuat field "tpRef" (teks TP asal) dan "topicRef" (topik asal).
+- Alokasi jumlah soal per TP harus persis sesuai kuota yang ditentukan di atas.`
+        : `- Tujuan Pembelajaran (TP): ${tp || 'Mendalami materi esensial secara menyeluruh'}
+- Topik / Materi Pokok: ${topic || tp || subject}`;
+
       const prompt = `Susun PERSIS ${count} BUTIR SOAL evaluasi untuk:
 - Mata Pelajaran: ${subject}
 - Kelas: Kelas ${grade} (${fase})
 - Semester: Semester ${semester} (Tahun Ajaran ${academicYear})
-- Tujuan Pembelajaran (TP): ${tp || 'Mendalami materi esensial secara menyeluruh'}
-- Topik / Materi Pokok: ${topic || tp || subject}
+${tpSection}
 - Bentuk Soal: ${questionType} (Jika 'Campuran', buatlah proporsi PG 60%, Isian Singkat 25%, Uraian 15%)
 - Target Level Kognitif: ${cognitiveLevel}
 - Preferensi Gaya: ${questionStyle}
+${cognitiveGuidance}
 
 PANDUAN VARIASI BUTIR SOAL (Wajib berbeda sudut pandang antar nomor):
-- Setiap butir soal menguji indikator/sub-konsep yang berbeda dari topik ${topic || subject}.
+- Setiap butir soal menguji indikator/sub-konsep yang berbeda dari topik terkait.
 - Variasikan jenis stimulus: sebagian kasus cerita anak (tokoh berganti-ganti: Siti, Made, Edo, Dayu, Lani, Udin, Beni), sebagian tabel data sederhana / hasil observasi, sebagian dialog antarsiswa, sebagian deskripsi eksperimen, dan ada butir soal pemahaman langsung tanpa stimulus panjang.
 - Variasikan kata tanya di setiap nomor: "Bagaimana cara...", "Mengapa hal tersebut...", "Jika kondisi diubah menjadi ..., apakah akibatnya...", "Solusi apa yang paling tepat...", "Manakah kelompok yang...", "Urutan yang benar adalah...", "Simpulan apa yang dapat diambil dari data...".
 
@@ -254,7 +314,9 @@ Format setiap objek dalam JSON array:
     "discussion": "Penjelasan detail konsep ilmiah dan alasan jawaban benar...",
     "cognitiveLevel": "C3 / C4 / C5",
     "indicator": "Disajikan ..., peserta didik dapat ...",
-    "score": 1
+    "score": 1,
+    "tpRef": "Teks TP terkait butir soal ini",
+    "topicRef": "Topik terkait butir soal ini"
   }
 ]`;
 
@@ -313,6 +375,9 @@ Format setiap objek dalam JSON array:
                   }
                 }
 
+                const assignedTp = item.tpRef || (expectedTpMap[idx] ? expectedTpMap[idx].tp : tp);
+                const assignedTopic = item.topicRef || (expectedTpMap[idx] ? expectedTpMap[idx].topic : (topic || subject));
+
                 return {
                   id: `ai-q-${idx + 1}-${Date.now()}`,
                   number: idx + 1,
@@ -324,8 +389,10 @@ Format setiap objek dalam JSON array:
                   correctAnswer: finalCorrect || 'Kunci jawaban terlampir',
                   discussion: item.discussion || item.explanation || 'Pembahasan materi terkait konsep esensial kurikulum.',
                   cognitiveLevel: item.cognitiveLevel || (idx % 3 === 0 ? 'C4' : idx % 3 === 1 ? 'C3' : 'C2'),
-                  indicator: item.indicator || `Mengukur pemahaman konsep ${topic || subject}`,
-                  score: item.score || (itemType === 'Uraian' ? 3 : itemType === 'Isian Singkat' ? 2 : 1)
+                  indicator: item.indicator || `Mengukur pemahaman konsep ${assignedTopic}`,
+                  score: item.score || (itemType === 'Uraian' ? 3 : itemType === 'Isian Singkat' ? 2 : 1),
+                  tpRef: assignedTp,
+                  topicRef: assignedTopic,
                 };
               });
 

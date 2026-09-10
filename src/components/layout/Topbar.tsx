@@ -9,8 +9,10 @@ import {
   Search,
   RotateCcw,
   ChevronRight,
-  Database
+  Database,
+  FileSpreadsheet
 } from 'lucide-react';
+import { useGoogleAuth } from '../../context/GoogleAuthContext';
 
 interface TopbarProps {
   onToggleSidebar: () => void;
@@ -29,6 +31,8 @@ export const Topbar: React.FC<TopbarProps> = ({ onToggleSidebar }) => {
     setSearchQuery,
     setIsBackupModalOpen
   } = useApp();
+
+  const { isConnected: isGoogleConnected, setIsSheetsModalOpen } = useGoogleAuth();
 
   const [localSearch, setLocalSearch] = useState('');
 
@@ -58,6 +62,8 @@ export const Topbar: React.FC<TopbarProps> = ({ onToggleSidebar }) => {
         return { title: 'Prota & Promes', subtitle: 'Pemetaan Jam Pelajaran Efektif Berdasarkan Kalender Pendidikan' };
       case 'profile':
         return { title: 'Daftar Guru & Profil', subtitle: 'Informasi Resmi Pengesahan Administrasi Pengawas & Kepala Sekolah' };
+      case 'google-sheets':
+        return { title: 'Google Sheets & Drive', subtitle: 'Integrasi Cloud: Naskah Soal, Kisi-Kisi, & Rekap Nilai Siswa' };
       default:
         return { title: 'Dashboard Ringkasan', subtitle: 'Sistem Perangkat Ajar' };
     }
@@ -135,6 +141,25 @@ export const Topbar: React.FC<TopbarProps> = ({ onToggleSidebar }) => {
           className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
         >
           <Sparkles className="w-4 h-4 text-orange-500" />
+        </button>
+
+        {/* Google Sheets Cloud Sync Menu */}
+        <button
+          id="btn-topbar-google-sheets"
+          type="button"
+          onClick={() => setIsSheetsModalOpen(true)}
+          title="Integrasi Google Sheets & Google Drive"
+          className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5"
+        >
+          <div className="relative">
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            {isGoogleConnected && (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 absolute -top-0.5 -right-0.5 ring-2 ring-white dark:ring-slate-900"></span>
+            )}
+          </div>
+          <span className="hidden xl:inline text-xs font-bold text-slate-700 dark:text-slate-200">
+            Google Sheets
+          </span>
         </button>
 
         {/* Database Backup & Restore Menu */}
